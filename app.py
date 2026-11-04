@@ -1,4 +1,4 @@
-"""Career Pathways: one page, sections 1 to 6. Page setup, session state and calls only.
+"""Root: one page, sections 1 to 6. Page setup, session state and calls only.
 
 Every decision comes from engine.py; everything drawn comes from ui/.
 """
@@ -20,7 +20,7 @@ from ui import skills_gap as skills_gap_ui
 from ui import theme
 from ui import topbar
 
-st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="Root: North East careers", page_icon="🧭", layout="wide")
 theme.apply_theme()
 
 st.session_state.setdefault("profile", None)

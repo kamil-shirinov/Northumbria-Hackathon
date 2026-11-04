@@ -19,7 +19,7 @@ import streamlit as st
 
 HERO_KEY = "hero"  # the container around the title, tagline and pathway
 TOPBAR_KEY = "topbar"  # the top bar (ui/topbar.py)
-BRAND_KEY = "topbar_brand"  # the brand text inside the top bar
+BRAND_KEY = "topbar_brand"  # the logo (or the text "Root") inside the top bar
 FOOTER_KEY = "site_footer"  # the footer text (ui/components.py)
 CARD_KEY_PREFIX = "card_"  # every career, course and guide card has a key that starts with this
 
@@ -59,6 +59,7 @@ div[data-testid="stApp"] {{
   margin-bottom: 0.5rem;
 }}
 .st-key-{BRAND_KEY} [data-testid="stMarkdownContainer"] p {{ margin: 0; font-size: 1.15rem; white-space: nowrap; }}
+.st-key-{BRAND_KEY} [data-testid="stElementToolbar"] {{ display: none; }}  /* a logo needs no enlarge button */
 
 /* Hero: a soft light-blue to pink band behind the title and tagline (dark text on both ends is over 14:1). */
 .st-key-{HERO_KEY} {{

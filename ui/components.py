@@ -125,5 +125,5 @@ def card_grid(items: list[dict], draw: Callable[[dict], None]) -> None:
 def footer() -> None:
     st.divider()
     with st.container(key=FOOTER_KEY):
-        st.caption("Career Pathways · prototype built at the Claude Builder Club hackathon, Northumbria University")
+        st.caption("Root · prototype built at the Claude Builder Club hackathon, Northumbria University")
         st.caption(f"If your situation is complicated, talk to the {NCS_LINK}: {NCS_URL}")

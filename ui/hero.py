@@ -11,7 +11,7 @@ import streamlit as st
 
 from ui.theme import HERO_KEY
 
-TITLE = "Career Pathways"
+TITLE = "Root"
 TAGLINE = "Find North East careers, the skills they need, and the courses that get you there."
 
 _TEXT = "#111827"  # dark text: over 14:1 on the whole light-blue to pink band
