@@ -1,0 +1,9 @@
+course_id,title,provider,cost_gbp,funded,length_weeks,format,entry_requirements,skills_taught,source_url
+CRS01,PLACEHOLDER – Care Certificate essentials,Placeholder Learning,0,no,4,"Online, self-paced",None,Communication;Safeguarding;Teamwork,https://example.com/placeholder
+CRS02,PLACEHOLDER – First aid at work,Placeholder Training Ltd,95,no,1,Classroom,None,First aid;Health and safety,https://example.com/placeholder
+CRS03,PLACEHOLDER – Level 2 adult care diploma,Placeholder College,1800,yes,24,"Part-time at college, includes an unpaid placement",GCSE English recommended,Safeguarding;Communication;Teamwork;First aid,https://example.com/placeholder
+CRS04,PLACEHOLDER – Spreadsheets and data analysis,Placeholder Open Learning,0,no,8,"Online, self-paced",None,Spreadsheets;Data analysis,https://example.com/placeholder
+CRS05,PLACEHOLDER – Spreadsheets and data analysis (evening class),Placeholder Academy,450,no,4,Evening classes,None,Spreadsheets;Data analysis,https://example.com/placeholder
+CRS06,PLACEHOLDER – Introduction to coding,Placeholder Digital Bootcamp,2500,yes,12,"Part-time, online with live sessions",Basic IT skills,Coding basics;Problem solving,https://example.com/placeholder
+CRS07,PLACEHOLDER – Project management foundations,Placeholder Business School,250,no,6,Online with a tutor,None,Project management;Problem solving,https://example.com/placeholder
+CRS08,PLACEHOLDER – Technical drawing and workshop safety,Placeholder Technical College,600,no,10,Evening classes at college,GCSE maths recommended,Technical drawing;Health and safety;Problem solving,https://example.com/placeholder
