@@ -142,7 +142,8 @@ def test_rank_careers_shape(profile, group):
         assert isinstance(c["entry_route"], str) and c["entry_route"].strip()
         assert isinstance(c["source_url"], str) and c["source_url"].startswith("http")
         assert isinstance(c["unpaid_placement"], bool)
-        assert isinstance(c["score"], float)
+        assert isinstance(c["score"], float) and 0.0 <= c["score"] <= 100.0
+        assert c["score"] == round(c["score"], 1)
         assert c["skills"] and all(isinstance(s, str) for s in c["skills"])
         assert c["reasons"] and all(isinstance(r, str) and r for r in c["reasons"])
     assert len({c["career_id"] for c in careers}) == len(careers)
@@ -163,7 +164,7 @@ def test_rank_careers_puts_an_interest_first(options):
         profile = make_profile(options, interests=[sector], skills=[])
         top = engine.rank_careers(profile, "gcse", n=1)[0]
         assert top["sector"] == sector
-        assert f"Matches your interest in {sector}" in top["reasons"]
+        assert top["reasons"][0] == f"In your chosen area: {sector}"
 
 
 def test_entry_route_comes_from_the_groups_column():
@@ -412,15 +413,21 @@ def test_synthetic_skills_are_split_trimmed_deduplicated_and_matched_loosely(syn
     assert engine.skills_gap({"skills": ["  COOKING"]}, "CAR01") == {"have": ["Cooking"], "missing": ["Cleaning"]}
 
 
-def test_synthetic_rank_order_is_interest_then_skill_share_then_demand_then_id(synthetic):
+def test_synthetic_rank_order_follows_the_weighted_score(synthetic):
+    assert engine.WEIGHTS == {"interest": 60, "skills": 25, "demand": 15}
     profile = {"interests": ["sector b "], "skills": ["Cooking"]}
-    ids = [c["career_id"] for c in engine.rank_careers(profile, "gcse", n=10)]
-    # Sector B first (interest, matched ignoring case and spaces): CAR02 holds 1 of 1 skills, CAR03 1 of 3.
-    # Then sector A: CAR01 and CAR04 both hold 1 of 2, so demand decides (CAR04 high beats CAR01 low).
-    assert ids == ["CAR02", "CAR03", "CAR04", "CAR01"]
-    # No interests: share of skills first (1 of 1, then the 1 of 2 tie broken by demand, then 1 of 3).
-    ids = [c["career_id"] for c in engine.rank_careers({"skills": ["Cooking"]}, "gcse", n=10)]
-    assert ids == ["CAR02", "CAR04", "CAR01", "CAR03"]
+    ranked = engine.rank_careers(profile, "gcse", n=10)
+    # Sector B is an interest (matched ignoring case and spaces):
+    #   CAR02 60 + 25*1/1 + 15*1 = 100.0, CAR03 60 + 25*1/3 + 15*0.5 = 75.8
+    # Sector A is not: CAR04 25*1/2 + 15*1 = 27.5, CAR01 25*1/2 + 0 = 12.5
+    assert [(c["career_id"], c["score"]) for c in ranked] == [
+        ("CAR02", 100.0), ("CAR03", 75.8), ("CAR04", 27.5), ("CAR01", 12.5),
+    ]
+    # No interests: CAR02 40.0, CAR04 27.5, CAR03 25/3 + 7.5 = 15.8, CAR01 12.5.
+    ranked = engine.rank_careers({"skills": ["Cooking"]}, "gcse", n=10)
+    assert [(c["career_id"], c["score"]) for c in ranked] == [
+        ("CAR02", 40.0), ("CAR04", 27.5), ("CAR03", 15.8), ("CAR01", 12.5),
+    ]
 
 
 def test_synthetic_course_order_and_closes(synthetic):

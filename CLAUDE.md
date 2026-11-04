@@ -28,7 +28,8 @@ Hackathon app (Python + Streamlit). It shows a user North East careers for their
 
 ```bash
 pip install -q -r requirements.txt   # first, in every new session
-pytest -q
+python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
+python3 -m eval.bias_test
 MOCK_LLM=1 streamlit run app.py
 ```
 
@@ -47,6 +48,13 @@ MOCK_LLM=1 streamlit run app.py
 - A source link on every career and course.
 - The advisor says when it's unsure and points to the National Careers Service.
 
+## Fairness rules
+
+- Qualification and group change only the entry route shown, never a career's rank or score.
+- Name, gender, ethnicity, age, postcode and town never change any output.
+- Results don't depend on the order of the user's interests or skills.
+- Checked by `tests/test_engine.py` and `python3 -m eval.bias_test` (20 twin profiles that differ only in personal details).
+
 ## CONTRACT v1 (UI ⇄ engine/advisor; change only by agreement, recorded here by Kamil)
 
 ```text
@@ -61,7 +69,7 @@ engine.assign_group(profile) -> group id: "career_changer" if has_experience and
 engine.rank_careers(profile, group, n=5) -> [career], best first, never empty.
   career = {career_id, title, sector, ne_demand: "high"|"medium"|"low", pay_min: int, pay_max: int (£ a year),
             entry_route: str (for this group, never empty), unpaid_placement: bool, skills: [str], source_url,
-            score: float, reasons: [str] (plain English, shown to the user)}
+            score: float (0–100 match score, 1 dp, safe to display), reasons: [str] (plain English, explain the score, shown to the user)}
 engine.skills_gap(profile, career) -> {"have": [str], "missing": [str]}, in the career's skill order.
 engine.recommend_courses(missing, profile, n=5) -> [course]: only courses that close at least one missing skill; [] if none (the UI then shows the entry route and the NCS link).
   Order: most missing skills closed, then free or funded first, then cheaper, then shorter, then course_id.
@@ -81,5 +89,5 @@ The UI may import groups.GROUPS and groups.NCS_URL. Every return value is plain 
 DATA (data/*.csv, exported from Google Sheets; the data teammate's real rows replace the placeholders at about 15:45)
 careers.csv: career_id,title,sector,ne_demand,pay_min,pay_max,entry_route_no_quals,entry_route_gcse,entry_route_level3,entry_route_graduate,entry_route_career_changer,skills,source_url
 courses.csv: course_id,title,provider,cost_gbp,funded,length_weeks,format,entry_requirements,skills_taught,source_url
-IDs: CAR01… and CRS01…. skills and skills_taught are semicolon-separated and spelled the same in both files. ne_demand: high|medium|low. funded: yes|no. Pay in whole £ a year; cost_gbp 0 means free; length in weeks. Every entry_route_* is filled and never says "not possible". Any route or course with an unpaid placement says "unpaid". Every row has a real source_url. Placeholder titles start with "PLACEHOLDER".
+IDs: CAR01… and CRS01…. skills and skills_taught are semicolon-separated and spelled the same in both files. ne_demand: high|medium|low. funded: yes|no. Pay in whole £ a year; cost_gbp is what an eligible learner pays (0 if funding covers it); funded is yes when public or employer funding covers some or all of the cost; length in weeks. Every entry_route_* is filled and never says "not possible". Any route or course with an unpaid placement says "unpaid". Every row has a real source_url. Placeholder titles start with "PLACEHOLDER".
 ```
