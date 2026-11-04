@@ -13,7 +13,7 @@ def _bullets(skills: list[str], prefix: str = "") -> str:
 
 def render_skills_gap(gap: dict, career: dict | None = None) -> None:
     """Show "You have" and "Still to learn". `career` (optional) only names the career in a caption."""
-    st.header("4. Your skills gap")
+    st.header("4. Your skills gap", anchor=False)
     if career:
         st.caption(f"For: {components.escape(career.get('title', ''))}")
 
@@ -30,13 +30,13 @@ def render_skills_gap(gap: dict, career: dict | None = None) -> None:
 
     have_col, missing_col = st.columns(2)
     with have_col:
-        st.markdown("#### You have")
+        st.subheader("You have", anchor=False)  # one level below the section heading
         if have:
             st.markdown(_bullets(have, "✓ "))
         else:
             st.write("None of these yet. That's fine, everyone starts somewhere.")
     with missing_col:
-        st.markdown("#### Still to learn")
+        st.subheader("Still to learn", anchor=False)
         if missing:
             st.markdown(_bullets(missing))
         else:

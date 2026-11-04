@@ -11,7 +11,7 @@ from ui import components
 _YES, _NO = "Yes", "No"
 _PENDING_KEY = "pf_example_profile"  # an example profile waiting to be returned on the next run
 _MAX_YEARS = 60  # the form's own upper limit for years of experience
-_EXAMPLES_PER_ROW = 3
+_EXAMPLES_PER_ROW = 2  # at most 2 columns anywhere on the page
 
 
 def _build_profile(qualification, worked: bool, years, interests, skills, town) -> dict:
@@ -102,24 +102,31 @@ def _render_examples(options: dict, qualification_labels: dict) -> None:
     if not examples:
         return
     st.markdown("**Want to see how it works first?** Try an example. It fills in the form and shows its results.")
-    for start in range(0, len(examples), _EXAMPLES_PER_ROW):
-        row = examples[start : start + _EXAMPLES_PER_ROW]
-        for column, example in zip(st.columns(_EXAMPLES_PER_ROW), row):
-            column.button(
-                example["label"],
-                key=f"pf_example_{example['group']}",
-                on_click=_apply_example,
-                args=(example["profile"],),
-                help=_describe(example["profile"], qualification_labels),
-                use_container_width=True,
-            )
+
+    def example_button(container, example: dict) -> None:
+        container.button(
+            f"Example: {components.escape(example['label'])}",
+            key=f"pf_example_{example['group']}",
+            on_click=_apply_example,
+            args=(example["profile"],),
+            help=_describe(example["profile"], qualification_labels),
+            width="stretch",
+        )
+
+    # Two columns at most (they stack on a phone). An odd one out gets a full-width row of its own.
+    paired = len(examples) - len(examples) % _EXAMPLES_PER_ROW
+    for start in range(0, paired, _EXAMPLES_PER_ROW):
+        for column, example in zip(st.columns(_EXAMPLES_PER_ROW), examples[start : start + _EXAMPLES_PER_ROW]):
+            example_button(column, example)
+    for example in examples[paired:]:
+        example_button(st, example)
 
 
 def render_profile_form() -> dict | None:
     """Draw the form. Returns the profile (CONTRACT v1) on the run it is submitted or an example is chosen, otherwise None."""
     options = engine.form_options()
 
-    st.header("1. Your profile")
+    st.header("1. Your profile", anchor=False)
     st.caption("Answer a few questions. It takes about a minute.")
     st.caption("We don't ask for your name, age, gender, ethnicity, contact details or postcode.")
 
