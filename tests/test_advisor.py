@@ -421,3 +421,51 @@ def test_an_unrecognised_mock_llm_value_is_not_mock_and_warns(live, monkeypatch,
     monkeypatch.setattr(advisor, "_warned_values", set())
     assert advisor.mode() == "live"
     assert "MOCK_LLM='maybe'" in capsys.readouterr().err
+
+
+def _assert_valid_for_api(messages):
+    assert messages and messages[0]["role"] == "user" and messages[-1]["role"] == "user"
+    assert all(a["role"] != b["role"] for a, b in zip(messages, messages[1:]))
+
+
+def test_trimmed_history_that_starts_with_assistant_drops_it(live, context):
+    client = live()
+    # 7 alternating turns from user: the last-6 window (turns 1-6) starts on assistant turn 1,
+    # which is dropped; turn 6 is a user turn, so it merges with the new question
+    history = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"} for i in range(7)]
+    ask(context, "latest question", history=history)
+    messages = client.calls[0]["messages"]
+    _assert_valid_for_api(messages)
+    assert [m["content"] for m in messages] == ["turn 2", "turn 3", "turn 4", "turn 5", "turn 6\n\nlatest question"]
+
+
+@pytest.mark.parametrize("roles", [
+    "aaaaaa", "uuuuuu", "auau", "uuaauu", "aauuaa", "uaauua", "auuaau", "uaua", "", "a", "u",
+    "uauauauaua", "aaauuu", "uuuaaa",
+])
+def test_any_history_shape_gives_alternating_messages_ending_with_the_question(roles):
+    role = {"u": "user", "a": "assistant"}
+    history = [{"role": role[r], "content": f"{r}{i}"} for i, r in enumerate(roles)]
+    messages = advisor.build_messages(history, "question")
+    _assert_valid_for_api(messages)
+    assert messages[-1]["content"].endswith("question")
+    # only the last 6 turns are used, and every non-leading-assistant turn in them is kept, in order
+    window = history[-advisor.HISTORY_TURNS:]
+    while window and window[0]["role"] == "assistant":
+        window.pop(0)
+    text = "\n\n".join(m["content"] for m in messages)
+    assert text == "\n\n".join([t["content"] for t in window] + ["question"])
+
+
+def test_consecutive_same_role_turns_are_merged():
+    history = [
+        {"role": "user", "content": "u1"},
+        {"role": "user", "content": "u2"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "assistant", "content": "a2"},
+    ]
+    assert advisor.build_messages(history, "q") == [
+        {"role": "user", "content": "u1\n\nu2"},
+        {"role": "assistant", "content": "a1\n\na2"},
+        {"role": "user", "content": "q"},
+    ]

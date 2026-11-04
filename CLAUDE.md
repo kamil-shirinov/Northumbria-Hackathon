@@ -103,6 +103,7 @@ engine.recommend_courses(missing, profile, n=5) -> [course]: only courses that c
 advisor.ask(group, profile, context, question, history) -> {"answer": str, "mentioned_ids": [str], "unknown_mentions": [str], "mode": "mock"|"live"}
   context = {"careers": [career], "selected_career": career or None, "gap": dict or None, "courses": [course]}
   history = [{"role": "user"|"assistant", "content": str}], oldest first, kept by the UI.
+  history holds only earlier turns, oldest first, each {"role", "content"}; the new question goes only in question, never in history.
   Answers cite items as "Title [ID]". Non-empty unknown_mentions → the UI shows a visible warning; mode "mock" → the UI shows a small "demo mode" label.
 The UI may import groups.GROUPS and groups.NCS_URL. Every return value is plain Python (str, int, float, bool, list, dict), never pandas or numpy types.
 ```
