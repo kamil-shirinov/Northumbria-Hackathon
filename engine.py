@@ -3,8 +3,9 @@
 Implements the engine half of CONTRACT v1 (see CLAUDE.md). Every return value is plain
 Python (str, int, float, bool, list, dict), never pandas or numpy types.
 
-Status: assign_group and skills_gap are final. rank_careers and recommend_courses are
-first passes: the shape and ordering rules are the contract, the scoring is placeholder.
+Fairness rules (see CLAUDE.md): qualification and group change only the entry route
+shown, never a career's rank or score; name, gender, ethnicity, age, postcode and town
+never change any output; the order of the user's interests or skills never matters.
 """
 
 from __future__ import annotations
@@ -31,7 +32,12 @@ def _resolve_data_dir() -> Path:
 
 DATA_DIR: Path = _resolve_data_dir()
 
-_DEMAND_RANK = {"high": 2, "medium": 1, "low": 0}
+# Match score (0-100) = sum of weight x component, each component between 0 and 1.
+# interest outweighs skills + demand together (60 > 25 + 15), so a career in a chosen
+# area always ranks above one outside them.
+WEIGHTS = {"interest": 60, "skills": 25, "demand": 15}
+
+_DEMAND_VALUE = {"high": 1.0, "medium": 0.5, "low": 0.0}
 
 # Loaded once and cached; reload_data() clears it.
 _cache: dict | None = None
@@ -172,7 +178,7 @@ def form_options() -> dict:
 
 
 def assign_group(profile: dict) -> str:
-    """FINAL. "career_changer" with enough experience, otherwise the qualification.
+    """"career_changer" with enough experience, otherwise the qualification.
 
     A missing or unrecognised qualification falls back to "no_quals", the most open
     group (no closed doors).
@@ -194,43 +200,52 @@ def _entry_route(career: dict, group: str) -> str:
     )
 
 
-def _skills_reason(held: int, total: int) -> str | None:
+def _interest_reason(liked: bool, picked_any: bool, sector: str) -> str:
+    if not picked_any:
+        return "Pick some interests to tailor this list"
+    return f"In your chosen area: {sector}" if liked else "Outside your chosen areas"
+
+
+def _skills_reason(held: list[str], total: int) -> str | None:
     if total == 0:
         return None
-    if held == 0:
+    if not held:
         return f"You have none of its {total} skills yet, but you can build them"
-    if held == total and total > 1:
-        return f"You already have all {total} skills"
-    return f"You already have {held} of {total} {'skill' if total == 1 else 'skills'}"
+    noun = "skill" if total == 1 else "skills"
+    return f"You already have {len(held)} of {total} {noun}: {', '.join(held[:3])}"
 
 
 def rank_careers(profile: dict, group: str, n: int = 5) -> list[dict]:
-    """FIRST PASS. Best first, never empty (at least one career whenever the data has any).
+    """Best first, never empty (at least one career whenever the data has any).
 
-    Sort order: sector is one of the user's interests, then the share of the career's
-    skills already held, then NE demand (high > medium > low), then career_id.
-    "score" encodes that same order as one number (higher is better) so it is safe to
-    sort on; it is not a percentage and the UI should show "reasons", not the score.
+    score = WEIGHTS["interest"]*interest + WEIGHTS["skills"]*skill_share
+            + WEIGHTS["demand"]*demand, rounded to 1 dp (a 0-100 match score).
+      interest    1 if the career's sector is one of the user's interests, else 0
+      skill_share career skills held / career skills
+      demand      1 high, 0.5 medium, 0 low
+    Sort: score desc, then demand desc, then career_id. group only picks the entry route.
     """
     group = _resolve_group(profile, group)
-    interests = {_norm(i) for i in (profile.get("interests") or [])}
+    interests = {_norm(i) for i in (profile.get("interests") or [])} - {""}
     held_skills = _held_skills(profile)
 
     ranked = []
     for c in _data()["careers"]:
         liked = _norm(c["sector"]) in interests
+        held = [s for s in c["skills"] if _norm(s) in held_skills]
         total = len(c["skills"])
-        held = sum(_norm(s) in held_skills for s in c["skills"])
-        share = held / total if total else 0.0
-        demand = _DEMAND_RANK.get(c["ne_demand"], 0)
+        share = len(held) / total if total else 0.0
+        demand = _DEMAND_VALUE.get(c["ne_demand"], 0.0)
+        score = round(
+            WEIGHTS["interest"] * liked + WEIGHTS["skills"] * share + WEIGHTS["demand"] * demand,
+            1,
+        )
 
-        reasons = []
-        if liked:
-            reasons.append(f"Matches your interest in {c['sector']}")
+        reasons = [_interest_reason(liked, bool(interests), c["sector"])]
         skills_reason = _skills_reason(held, total)
         if skills_reason:
             reasons.append(skills_reason)
-        if c["ne_demand"] in _DEMAND_RANK:
+        if c["ne_demand"] in _DEMAND_VALUE:
             reasons.append(f"{c['ne_demand'].capitalize()} demand in the North East")
 
         route = _entry_route(c, group)
@@ -245,17 +260,18 @@ def rank_careers(profile: dict, group: str, n: int = 5) -> list[dict]:
             "unpaid_placement": _mentions_unpaid(route),
             "skills": list(c["skills"]),
             "source_url": c["source_url"],
-            "score": round(liked * 100.0 + share * 10.0 + demand * 0.01, 4),
+            "score": float(score),
             "reasons": reasons,
         }
-        ranked.append(((not liked, -share, -demand, c["career_id"]), career))
+        # Sort on the rounded score so the order always matches the scores shown.
+        ranked.append(((-score, -demand, c["career_id"]), career))
 
     ranked.sort(key=lambda pair: pair[0])
     return [career for _, career in ranked[: max(1, n)]]
 
 
 def skills_gap(profile: dict, career: dict | str) -> dict:
-    """FINAL. Split the career's skills into held and missing, in the career's order.
+    """Split the career's skills into held and missing, in the career's order.
 
     career is a career dict from rank_careers or a career_id.
     """
@@ -272,7 +288,7 @@ def skills_gap(profile: dict, career: dict | str) -> dict:
 
 
 def recommend_courses(missing: list[str], profile: dict, n: int = 5) -> list[dict]:
-    """FIRST PASS. Courses that close at least one missing skill, best first.
+    """Courses that close at least one missing skill, best first.
 
     Order: most missing skills closed, then free or funded first, then cheaper, then
     shorter, then course_id. profile is accepted for the contract but not used: nothing

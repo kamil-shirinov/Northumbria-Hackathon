@@ -1,0 +1,10 @@
+course_id,title,provider,cost_gbp,funded,length_weeks,format,entry_requirements,skills_taught,source_url
+CRS01,Paid cheap short,Fixture College,50,no,2,Online,None,Coding,https://example.com/fixture
+CRS02,Funded part cost,Fixture College,900,yes,30,Online,None,Coding,https://example.com/fixture
+CRS03,Free long,Fixture College,0,no,10,Online,None,Coding,https://example.com/fixture
+CRS04,Free short,Fixture College,0,no,4,Online,None,Coding,https://example.com/fixture
+CRS05,Funded small cost,Fixture College,200,yes,6,Online,None,Coding,https://example.com/fixture
+CRS06,Paid cheap long,Fixture College,50,no,8,Online,None,Coding,https://example.com/fixture
+CRS07,Free short twin,Fixture College,0,no,4,Online,None,Coding,https://example.com/fixture
+CRS08,Paid two skills,Fixture College,500,no,12,Online,None,Coding;Problem solving,https://example.com/fixture
+CRS09,Fully funded,Fixture College,0,yes,12,Online,None,Coding,https://example.com/fixture
