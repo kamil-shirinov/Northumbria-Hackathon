@@ -41,7 +41,7 @@ Kamil's cloud sessions:
 pip install -q -r requirements.txt   # first, in every new session
 python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
 python3 -m eval.bias_test
-python3 -m eval.grounding_test   # writes eval/results/grounding.md; mock without a key
+python3 -m eval.grounding_test   # live (key) → eval/results/grounding.md; mock → grounding_mock.md (gitignored)
 MOCK_LLM=1 streamlit run app.py
 ```
 
@@ -62,7 +62,7 @@ MOCK_LLM=1 streamlit run app.py
 - Failures: any API error or timeout is printed to stderr and the mock answer is returned (mode "mock"), so the demo never crashes. If the regeneration call fails, the first answer is kept with its flags.
 - Budget: an in-memory cache keyed on group + normalised question + context IDs (and gap) + the last 6 turns (only live answers are cached). A cap of `ADVISOR_MAX_CALLS` (default 200) API calls per process; after that, the mock with a note.
 - Observability: `advisor.usage()` returns `{"calls", "cached", "input_tokens", "output_tokens"}`. `advisor.last_debug` holds the last ask's `{"regenerated", "first_unknown", "closed_door_fixed", "cached"}`. `advisor.reset()` clears the cache, counters and client (for tests and evals).
-- Tests: `tests/test_advisor.py` uses a fake client and tests/fixtures (no network, no key). Eval: `python3 -m eval.grounding_test` (15 questions in `eval/questions.txt` × 5 profiles) prints "Grounding: X/15 …" and writes `eval/results/grounding.md`, with a MOCK banner when not live.
+- Tests: `tests/test_advisor.py` uses a fake client and tests/fixtures (no network, no key). Eval: `python3 -m eval.grounding_test` (15 questions in `eval/questions.txt` × 5 profiles) prints "Grounding: X/15 …" A live run (key set, `MOCK_LLM` unset) writes `eval/results/grounding.md`, which only the demo laptop commits. A mock run writes `eval/results/grounding_mock.md` (gitignored, with a MOCK banner), so cloud sessions never overwrite the live results.
 
 ## Safeguards visible in the demo
 

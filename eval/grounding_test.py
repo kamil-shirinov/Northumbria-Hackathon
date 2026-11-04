@@ -7,8 +7,9 @@ Run from the repo root against whatever is in data/:
 Reads 15 questions from eval/questions.txt, pairs question i with synthetic profile
 i % 5 (one per group), builds each context with the engine and calls advisor.ask().
 Every answer is re-checked with advisor.validate(), so in mock mode this still catches
-validator false positives on the real data. Prints the headline line, writes
-eval/results/grounding.md and always exits 0: it reports, it doesn't gate.
+validator false positives on the real data. Prints the headline line and always exits 0:
+it reports, it doesn't gate. A live run writes eval/results/grounding.md; a mock run
+writes eval/results/grounding_mock.md, so it never overwrites the live results.
 
 Live mode needs ANTHROPIC_API_KEY and MOCK_LLM unset; without a key it runs in mock mode.
 """
@@ -22,7 +23,10 @@ import engine
 
 HERE = Path(__file__).resolve().parent
 QUESTIONS = HERE / "questions.txt"
-RESULTS = HERE / "results" / "grounding.md"
+# Only live runs (a real key, on the demo laptop) write grounding.md; mock runs, e.g. in a
+# cloud session, write grounding_mock.md, so they can never overwrite the live results.
+RESULTS_LIVE = HERE / "results" / "grounding.md"
+RESULTS_MOCK = HERE / "results" / "grounding_mock.md"
 N_QUESTIONS = 15
 
 
@@ -79,6 +83,7 @@ def _cell(text: str) -> str:
 
 
 def run() -> dict:
+    run_mode = advisor._mode()  # "live" with a key and MOCK_LLM unset, else "mock"
     questions = read_questions()
     profiles = build_profiles()
     rows = []
@@ -115,6 +120,7 @@ def run() -> dict:
         "input_tokens": used["input_tokens"],
         "output_tokens": used["output_tokens"],
         "live": sum(r["mode"] == "live" for r in rows),
+        "run_mode": run_mode,
     }
     summary["headline"] = (
         f"Grounding: {clean}/{len(rows)} answers with no unknown mentions · "
@@ -124,7 +130,11 @@ def run() -> dict:
     return {"summary": summary, "rows": rows}
 
 
-def write_report(report: dict, path: Path = RESULTS) -> None:
+def results_path(run_mode: str) -> Path:
+    return RESULTS_LIVE if run_mode == "live" else RESULTS_MOCK
+
+
+def write_report(report: dict, path: Path | None = None) -> Path:
     s, rows = report["summary"], report["rows"]
     lines = ["# Grounding eval", "", f"**{s['headline']}**", ""]
     if s["live"] < s["total"]:
@@ -154,15 +164,17 @@ def write_report(report: dict, path: Path = RESULTS) -> None:
             f"| {i} | {_cell(r['question'])} | {r['group']} | {r['mode']} | {_cell(', '.join(notes) or 'none')} "
             f"| {_cell(r['answer'])} |"
         )
+    path = path or results_path(s["run_mode"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def main() -> int:
     report = run()
     print(report["summary"]["headline"])
-    write_report(report)
-    print(f"Wrote {RESULTS.relative_to(HERE.parent)}")
+    path = write_report(report)
+    print(f"Wrote {path.relative_to(HERE.parent)}")
     return 0
 
 
