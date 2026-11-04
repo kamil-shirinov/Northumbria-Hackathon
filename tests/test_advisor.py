@@ -358,3 +358,19 @@ def test_history_is_made_valid_for_the_api():
         {"role": "user", "content": "first"},
     ]
     assert advisor.build_messages(history, "second") == [{"role": "user", "content": "first\n\nsecond"}]
+
+
+def test_the_users_own_words_are_not_flagged(context):
+    question = "Should I go to Newcastle College? I earn £18,000 now. Is Welder better? See https://my.example/page"
+    answer = (
+        "Newcastle College isn't in your results, and nor is Welder. Compared with your £18,000, "
+        "Care worker [CAR01] pays £21,000 to £25,000. I can't check https://my.example/page. Electrician [CAR05]?"
+    )
+    _, unknown = advisor.validate(answer, context, question)
+    assert unknown == ["[CAR05]"]  # ids are always checked
+
+
+def test_live_validation_allows_names_from_the_question(live, context):
+    client = live("Newcastle College isn't in your results. Care worker [CAR01] is.")
+    result = ask(context, "Should I go to Newcastle College?")
+    assert result["unknown_mentions"] == [] and len(client.calls) == 1

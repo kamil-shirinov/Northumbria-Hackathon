@@ -461,7 +461,7 @@ def _named_phrases(text: str) -> list[str]:
     return found
 
 
-def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
+def validate(answer: str, context: dict, user_text: str = "") -> tuple[list[str], list[str]]:
     """Check an answer against the context it was given.
 
     Returns (mentioned_ids, unknown_mentions), each in order of first appearance.
@@ -470,9 +470,15 @@ def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
     context; named courses, qualifications, colleges or universities that match nothing in
     the context; URLs that aren't a context source_url or NCS_URL; £ figures that aren't a
     context pay or cost value.
+
+    The user's own words (user_text: the question and their earlier turns) are allowed
+    too, so "Newcastle College isn't in your results" isn't flagged when they asked about
+    it. [IDs] are always checked.
     """
     context = context or {}
     text = (answer or "").replace("’", "'")
+    user_text = (user_text or "").replace("’", "'")
+    user_folded = _fold(user_text)
     careers = _context_careers(context)
     courses = list(context.get("courses") or [])
     ids = {c["career_id"]: c["title"] for c in careers if c.get("career_id")}
@@ -483,6 +489,7 @@ def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
         QUALIFICATIONS.values()
     )
     corpus = _fold(" | ".join(corpus_strings))
+    grounded = corpus + " | " + user_folded
 
     mentioned: list[tuple[int, str]] = []
     unknown: list[tuple[int, str]] = []
@@ -490,6 +497,7 @@ def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
 
     # 1. URLs (masked first so ids or figures inside them aren't read twice).
     allowed_urls = {_norm_url(u) for u in [NCS_URL] + [c.get("source_url") or "" for c in careers + courses] if u}
+    allowed_urls |= {_norm_url(m.group(0)) for m in _URL_RE.finditer(user_text)}
     for m in _URL_RE.finditer(text):
         url = m.group(0).rstrip(".,;:!?")
         if _norm_url(url) not in allowed_urls:
@@ -527,8 +535,8 @@ def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
         if item_id in ids:
             continue
         for variant in _title_variants(title):
-            if _fold(variant) in corpus:
-                continue  # e.g. an entry route that mentions the same job title
+            if _fold(variant) in grounded:
+                continue  # e.g. an entry route, or the user's question, names the same job
             pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(variant) + r"(?![A-Za-z0-9])", re.IGNORECASE)
             m = pattern.search(text_m)
             if m and re.match(r"\s*\[", text[m.end():]):
@@ -541,11 +549,11 @@ def validate(answer: str, context: dict) -> tuple[list[str], list[str]]:
 
     # 5. Named courses, qualifications, colleges and universities.
     for phrase in _named_phrases(text_m):
-        if _fold(phrase) not in corpus:
+        if _fold(phrase) not in grounded:
             unknown.append((text_m.find(phrase), phrase))
 
     # 6. £ figures (£22,000, £22k, £22000) and bare grouped numbers (22,000).
-    allowed_money = _money_values(context, corpus_strings)
+    allowed_money = _money_values(context, corpus_strings + [user_text])
     for m in _POUND_RE.finditer(text_m):
         value = _money_value(m.group(1), m.group(2))
         if value is not None and not _money_ok(value, bool(m.group(2)), allowed_money):
@@ -631,8 +639,10 @@ def _live_answer(group: str, profile: dict, context: dict, question: str, histor
     system = build_system(group, profile, context)
     messages = build_messages(history, question)
 
+    user_text = "\n".join(m["content"] for m in messages if m["role"] == "user")
+
     answer = _call(system, messages)
-    mentioned, unknown = validate(answer, context)
+    mentioned, unknown = validate(answer, context, user_text)
     closed = closed_door_phrases(answer)
     last_debug["first_unknown"] = list(unknown)
 
@@ -647,7 +657,7 @@ def _live_answer(group: str, profile: dict, context: dict, question: str, histor
         except Exception as exc:  # keep the first answer (and its warnings) if the retry fails
             print(f"advisor: regeneration failed ({type(exc).__name__}: {exc})", file=sys.stderr)
         else:
-            second_mentioned, second_unknown = validate(second, context)
+            second_mentioned, second_unknown = validate(second, context, user_text)
             if len(second_unknown) <= len(unknown):
                 answer, mentioned, unknown = second, second_mentioned, second_unknown
 
