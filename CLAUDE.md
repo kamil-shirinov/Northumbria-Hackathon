@@ -12,7 +12,7 @@ Hackathon app (Python + Streamlit). It shows a user North East careers for their
 
 | Owner | Branch | Files |
 | --- | --- | --- |
-| Kamil | `backend` | `CLAUDE.md`, `README.md`, `requirements.txt`, `.gitignore`, `.env.example`, `pytest.ini`, `data/`, `groups.py`, `engine.py`, `advisor.py`, `tests/`, `eval/` |
+| Kamil | `backend` | `CLAUDE.md`, `README.md`, `requirements.txt`, `.gitignore`, `.env.example`, `pytest.ini`, `data/`, `assets/`, `groups.py`, `engine.py`, `advisor.py`, `tests/`, `eval/` |
 | Dev 2 | `frontend` | `app.py`, `ui/`, `.streamlit/` |
 
 - Never edit a file you don't own.

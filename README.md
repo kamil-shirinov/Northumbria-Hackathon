@@ -1,6 +1,8 @@
-# Career Pathways
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/brand/root-logo-dark.svg"><img src="assets/brand/root-logo.svg" alt="Root" width="260"></picture></p>
 
-Many people leave the North East because they can't see a route into the careers on their doorstep. Career Pathways turns a short profile into local careers that fit, the skills still missing and the courses that close the gap, with an AI advisor that can only explain what our code found.
+# Root
+
+Many people leave the North East because they can't see a route into the careers on their doorstep. Root turns a short profile into local careers that fit, the skills still missing and the courses that close the gap, with an AI advisor that can only explain what our code found.
 
 ## Demo flow
 

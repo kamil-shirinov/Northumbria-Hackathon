@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 17 264 116" width="264" height="116" role="img" aria-labelledby="title">
+  <title id="title">Root</title>
+  <path d="M160.64 95A24.5 24.5 0 0 0 203.36 95Z" fill="#C29B52"/>
+  <g fill="none" stroke="#1E3A2F" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 56V110M48 76C48 63 57 56 72 56"/>
+    <circle cx="114" cy="83" r="27"/>
+    <circle cx="182" cy="83" r="27"/>
+    <path d="M240 40V98C240 106 245 110 254 110M226 60H256"/>
+    <path d="M182 95V76" stroke-width="3"/>
+  </g>
+  <g fill="#1E3A2F">
+    <path d="M182 85C176 85 172 81 171 75C177 75 181 79 182 85Z"/>
+    <path d="M182 79C188 79 192 75 193 69C187 69 183 73 182 79Z"/>
+  </g>
+</svg>
