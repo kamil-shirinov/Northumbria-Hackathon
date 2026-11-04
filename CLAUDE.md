@@ -31,6 +31,7 @@ Kamil's cloud sessions:
   `git fetch origin`, then `git checkout backend` (or `git checkout -b backend origin/backend` if it isn't local), then `git pull --rebase origin backend`.
 - Commit every change as soon as the tests pass, with a clear message, and push it straight away:
   `git pull --rebase origin backend`, then `git push origin backend`.
+- After merging `main` into `backend`, always pull with `git pull --rebase=merges origin backend` before pushing, so a rebase never flattens the merge.
 - Never end a reply with uncommitted or unpushed work. End every reply with the commit hash.
 - At the checkpoints (16:15, 17:00, 17:25) the session merges `backend` and `frontend` into `main` through pull requests it opens and merges itself with `gh api` (REST endpoints; `gh pr` is blocked here). It merges only after the tests pass on the merged result.
 
