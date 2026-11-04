@@ -8,7 +8,7 @@ Implements advisor.ask() from CONTRACT v1 (see CLAUDE.md).
   checks the answer against the context and data/*.csv. Unknown mentions or a closed-door
   phrase trigger one regeneration. Safeguards (closed-door fix, NCS pointer) are applied
   in code, whatever the model wrote.
-- Models: ADVISOR_MODEL (default claude-haiku-5-5) writes the answer and ADVISOR_REGEN_MODEL
+- Models: ADVISOR_MODEL (default claude-sonnet-5-5) writes the answer and ADVISOR_REGEN_MODEL
   (default: the answer model) writes the one regeneration. eval/model_compare.py sets
   MODEL and REGEN_MODEL on this module to compare configurations.
 - Budget: identical questions are cached, and live calls are capped per process
@@ -33,7 +33,7 @@ from groups import BASE_ADVISOR_RULES, GROUPS, NCS_URL, QUALIFICATIONS
 
 load_dotenv()  # reads .env on the demo laptop if present; real environment variables win
 
-DEFAULT_MODEL = "claude-haiku-5-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 
 
 def models_from_env(env=None) -> tuple[str, str]:
@@ -55,6 +55,8 @@ MAX_TOKENS = 400
 # max_tokens with no text, the call is retried once with adaptive thinking and this budget.
 ADAPTIVE_MAX_TOKENS = 2000
 THINKING_OFF = {"type": "disabled"}
+# Sonnet 5.5 rejects {"type": "disabled"} with a 400 that asks for "between_tools", so it gets that.
+THINKING_OFF_BY_MODEL = {"claude-sonnet-5-5": {"type": "between_tools"}}
 THINKING_ADAPTIVE = {"type": "adaptive"}
 OUTPUT_CONFIG = {"effort": "low"}
 TIMEOUT_SECONDS = 20
@@ -695,7 +697,7 @@ def _call_kwargs(client, model: str, system: str, messages: list[dict], adaptive
         "messages": messages,
     }
     extra = {}
-    for name, value in (("thinking", THINKING_ADAPTIVE if adaptive else THINKING_OFF), ("output_config", OUTPUT_CONFIG)):
+    for name, value in (("thinking", THINKING_ADAPTIVE if adaptive else THINKING_OFF_BY_MODEL.get(model, THINKING_OFF)), ("output_config", OUTPUT_CONFIG)):
         if _accepts(client, name):
             kwargs[name] = dict(value)
         else:
@@ -756,7 +758,7 @@ def _rejects_disabled_thinking(exc: Exception) -> bool:
 
 
 def _call(system: str, messages: list[dict], model: str | None = None, purpose: str = "answer") -> str:
-    """One answer from the API: thinking disabled, effort low, max_tokens MAX_TOKENS.
+    """One answer from the API: thinking off (between_tools on Sonnet 5.5), effort low, max_tokens MAX_TOKENS.
 
     Retries once with adaptive thinking (max_tokens ADAPTIVE_MAX_TOKENS) if the API rejects
     disabled thinking with a 400 (remembered per model) or stops at max_tokens with no text.
