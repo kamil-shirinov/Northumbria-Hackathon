@@ -358,3 +358,114 @@ def test_history_is_made_valid_for_the_api():
         {"role": "user", "content": "first"},
     ]
     assert advisor.build_messages(history, "second") == [{"role": "user", "content": "first\n\nsecond"}]
+
+
+def test_the_users_own_words_are_not_flagged(context):
+    question = "Should I go to Newcastle College? I earn £18,000 now. Is Welder better? See https://my.example/page"
+    answer = (
+        "Newcastle College isn't in your results, and nor is Welder. Compared with your £18,000, "
+        "Care worker [CAR01] pays £21,000 to £25,000. I can't check https://my.example/page. Electrician [CAR05]?"
+    )
+    _, unknown = advisor.validate(answer, context, question)
+    assert unknown == ["[CAR05]"]  # ids are always checked
+
+
+def test_live_validation_allows_names_from_the_question(live, context):
+    client = live("Newcastle College isn't in your results. Care worker [CAR01] is.")
+    result = ask(context, "Should I go to Newcastle College?")
+    assert result["unknown_mentions"] == [] and len(client.calls) == 1
+
+
+# --------------------------------------------------------------------------- MOCK_LLM values
+
+MOCK_FLAGS = ["1", "true", "TRUE", "True", "yes", "YES", "Yes", " yes "]
+LIVE_FLAGS = ["0", "false", "FALSE", "False", "no", "NO", "No", "", "  "]
+
+
+@pytest.mark.parametrize("flag", MOCK_FLAGS)
+def test_mock_llm_mock_values_mean_mock_even_with_a_key(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "mock"
+    assert ask(context)["mode"] == "mock"
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("flag", LIVE_FLAGS)
+def test_mock_llm_live_values_mean_live_with_a_key(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "live"
+    assert ask(context)["mode"] == "live"
+    assert len(client.calls) == 1
+
+
+def test_mock_llm_unset_means_live_with_a_key(live, context):
+    live(CLEAN)
+    assert advisor.mode() == "live" and ask(context)["mode"] == "live"
+
+
+@pytest.mark.parametrize("flag", LIVE_FLAGS + [None])
+def test_no_key_is_always_mock(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    if flag is not None:
+        monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "mock" and ask(context)["mode"] == "mock"
+    assert client.calls == []
+
+
+def test_an_unrecognised_mock_llm_value_is_not_mock_and_warns(live, monkeypatch, capsys):
+    live()
+    monkeypatch.setenv("MOCK_LLM", "maybe")
+    monkeypatch.setattr(advisor, "_warned_values", set())
+    assert advisor.mode() == "live"
+    assert "MOCK_LLM='maybe'" in capsys.readouterr().err
+
+
+def _assert_valid_for_api(messages):
+    assert messages and messages[0]["role"] == "user" and messages[-1]["role"] == "user"
+    assert all(a["role"] != b["role"] for a, b in zip(messages, messages[1:]))
+
+
+def test_trimmed_history_that_starts_with_assistant_drops_it(live, context):
+    client = live()
+    # 7 alternating turns from user: the last-6 window (turns 1-6) starts on assistant turn 1,
+    # which is dropped; turn 6 is a user turn, so it merges with the new question
+    history = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"} for i in range(7)]
+    ask(context, "latest question", history=history)
+    messages = client.calls[0]["messages"]
+    _assert_valid_for_api(messages)
+    assert [m["content"] for m in messages] == ["turn 2", "turn 3", "turn 4", "turn 5", "turn 6\n\nlatest question"]
+
+
+@pytest.mark.parametrize("roles", [
+    "aaaaaa", "uuuuuu", "auau", "uuaauu", "aauuaa", "uaauua", "auuaau", "uaua", "", "a", "u",
+    "uauauauaua", "aaauuu", "uuuaaa",
+])
+def test_any_history_shape_gives_alternating_messages_ending_with_the_question(roles):
+    role = {"u": "user", "a": "assistant"}
+    history = [{"role": role[r], "content": f"{r}{i}"} for i, r in enumerate(roles)]
+    messages = advisor.build_messages(history, "question")
+    _assert_valid_for_api(messages)
+    assert messages[-1]["content"].endswith("question")
+    # only the last 6 turns are used, and every non-leading-assistant turn in them is kept, in order
+    window = history[-advisor.HISTORY_TURNS:]
+    while window and window[0]["role"] == "assistant":
+        window.pop(0)
+    text = "\n\n".join(m["content"] for m in messages)
+    assert text == "\n\n".join([t["content"] for t in window] + ["question"])
+
+
+def test_consecutive_same_role_turns_are_merged():
+    history = [
+        {"role": "user", "content": "u1"},
+        {"role": "user", "content": "u2"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "assistant", "content": "a2"},
+    ]
+    assert advisor.build_messages(history, "q") == [
+        {"role": "user", "content": "u1\n\nu2"},
+        {"role": "assistant", "content": "a1\n\na2"},
+        {"role": "user", "content": "q"},
+    ]

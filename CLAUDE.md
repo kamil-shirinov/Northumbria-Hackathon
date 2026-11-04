@@ -31,6 +31,7 @@ Kamil's cloud sessions:
   `git fetch origin`, then `git checkout backend` (or `git checkout -b backend origin/backend` if it isn't local), then `git pull --rebase origin backend`.
 - Commit every change as soon as the tests pass, with a clear message, and push it straight away:
   `git pull --rebase origin backend`, then `git push origin backend`.
+- After merging `main` into `backend`, always pull with `git pull --rebase=merges origin backend` before pushing, so a rebase never flattens the merge.
 - Never end a reply with uncommitted or unpushed work. End every reply with the commit hash.
 - At the checkpoints (16:15, 17:00, 17:25) the session merges `backend` and `frontend` into `main` through pull requests it opens and merges itself with `gh api` (REST endpoints; `gh pr` is blocked here). It merges only after the tests pass on the merged result.
 
@@ -40,7 +41,8 @@ Kamil's cloud sessions:
 pip install -q -r requirements.txt   # first, in every new session
 python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
 python3 -m eval.bias_test
-MOCK_LLM=1 streamlit run app.py
+python3 -m eval.grounding_test   # live (key) → eval/results/grounding.md; mock → grounding_mock.md (gitignored)
+MOCK_LLM=1 streamlit run app.py   # MOCK_LLM: only 1/true/yes (any case) = mock; unset, empty, 0/false/no = live if ANTHROPIC_API_KEY is set; no key = always mock
 ```
 
 ## Budget and secrets
@@ -49,6 +51,18 @@ MOCK_LLM=1 streamlit run app.py
 - Cache identical questions.
 - `MOCK_LLM=1` for all development and tests.
 - The API key lives only in `.env` on the demo laptop, never in code, commits or cloud sessions.
+
+## Advisor (advisor.py; the ask() contract is unchanged)
+
+- Mode (`advisor.mode()`, also used by the eval to choose its results file): "mock" if `MOCK_LLM` is 1, true or yes (any case) or `ANTHROPIC_API_KEY` is missing. "live" if the key is set and `MOCK_LLM` is unset, empty, 0, false or no. Any other value is not mock and prints a warning. An empty context gets a fixed "not sure" answer with `NCS_URL` and no API call.
+- Live call: `anthropic.Anthropic(timeout=20, max_retries=1).messages.create(model=MODEL, max_tokens=400, temperature=0, ...)`, retried once without temperature if the API rejects it. The system prompt is `BASE_ADVISOR_RULES` + the group's `advisor_instructions` + the results as compact JSON (careers, selected_career, gap, courses, and the profile's qualification, experience, interests and skills; never the town). The messages are the last 6 history turns + the question.
+- `advisor.validate(answer, context, user_text="") -> (mentioned_ids, unknown_mentions)`. It flags [IDs] not in the context, data/*.csv careers and courses outside the results, invented named courses, qualifications, colleges and universities (title-case phrases with Course, Bootcamp, Apprenticeship, Certificate, Diploma, Degree, BTEC, NVQ, HNC, HND, T Level, Academy, Programme, College or University that match nothing in the context), URLs other than a context `source_url` or `NCS_URL`, and £ figures (£22,000, £22k or 22,000) other than a context pay or cost. Context titles without an ID count as mentions. It never flags the National Careers Service, group labels, generic phrases ("a Level 2 course") or the user's own words (named things, figures or links from the question or their earlier turns; [IDs] are always checked).
+- Regeneration: unknown mentions or a closed-door phrase ("not possible for you", "you can't become", "isn't an option for you"…) trigger at most one regeneration, which tells the model what to drop. The less-flagged answer wins. Anything still unknown is returned in `unknown_mentions`, and the UI shows the warning.
+- Safeguards enforced in code: a closed-door phrase that survives regeneration gets "There's always a route: … ask the National Careers Service (NCS_URL)." appended. An answer that cites no result and has no NCS pointer gets "Not sure? The National Careers Service can help: NCS_URL" appended. The mock never echoes [IDs] typed in the question.
+- Failures: any API error or timeout is printed to stderr and the mock answer is returned (mode "mock"), so the demo never crashes. If the regeneration call fails, the first answer is kept with its flags.
+- Budget: an in-memory cache keyed on group + normalised question + context IDs (and gap) + the last 6 turns (only live answers are cached). A cap of `ADVISOR_MAX_CALLS` (default 200) API calls per process; after that, the mock with a note.
+- Observability: `advisor.usage()` returns `{"calls", "cached", "input_tokens", "output_tokens"}`. `advisor.last_debug` holds the last ask's `{"regenerated", "first_unknown", "closed_door_fixed", "cached"}`. `advisor.reset()` clears the cache, counters and client (for tests and evals).
+- Tests: `tests/test_advisor.py` uses a fake client and tests/fixtures (no network, no key). Eval: `python3 -m eval.grounding_test` (15 questions in `eval/questions.txt` × 5 profiles) prints "Grounding: X/15 …" A live run (key set, `MOCK_LLM` unset) writes `eval/results/grounding.md`, which only the demo laptop commits. A mock run writes `eval/results/grounding_mock.md` (gitignored, with a MOCK banner), so cloud sessions never overwrite the live results.
 
 ## Safeguards visible in the demo
 
@@ -89,6 +103,7 @@ engine.recommend_courses(missing, profile, n=5) -> [course]: only courses that c
 advisor.ask(group, profile, context, question, history) -> {"answer": str, "mentioned_ids": [str], "unknown_mentions": [str], "mode": "mock"|"live"}
   context = {"careers": [career], "selected_career": career or None, "gap": dict or None, "courses": [course]}
   history = [{"role": "user"|"assistant", "content": str}], oldest first, kept by the UI.
+  history holds only earlier turns, oldest first, each {"role", "content"}; the new question goes only in question, never in history.
   Answers cite items as "Title [ID]". Non-empty unknown_mentions → the UI shows a visible warning; mode "mock" → the UI shows a small "demo mode" label.
 The UI may import groups.GROUPS and groups.NCS_URL. Every return value is plain Python (str, int, float, bool, list, dict), never pandas or numpy types.
 ```
