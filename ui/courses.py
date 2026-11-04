@@ -11,7 +11,7 @@ from ui.theme import CARD_KEY_PREFIX
 def _card(course: dict) -> None:
     title = course.get("title", course.get("course_id", "Course"))
     cost_label = components.cost_text(course.get("cost_gbp"))
-    # Free and Funded are pink-tint badges (the "violet" colour in .streamlit/config.toml, dark text on a pink background).
+    # Free and Funded are soft-gold badges (the "violet" colour in .streamlit/config.toml, dark text on the gold tint).
     cost = f"**Cost:** {components.badge(cost_label, 'violet') if cost_label == 'Free' else cost_label}"
     if course.get("funded"):
         cost += f" {components.badge('Funded', 'violet')}"

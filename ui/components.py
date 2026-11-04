@@ -21,7 +21,7 @@ _MARKDOWN_SPECIAL = re.compile(r"([\\`*_\[\]$~<>#|])")
 # Text is always part of the badge, so meaning never depends on colour alone.
 _DEMAND_BADGES = {
     "high": ("High demand in the North East", "green"),
-    "medium": ("Medium demand in the North East", "orange"),
+    "medium": ("Medium demand in the North East", "violet"),  # orange is kept for the unpaid-placement warning
     "low": ("Lower demand in the North East", "gray"),
 }
 
@@ -34,7 +34,8 @@ def escape(text: object) -> str:
 def badge(text: str, color: str = "blue") -> str:
     """A Streamlit badge as a markdown string. Colours: blue, green, orange, red, violet, gray.
 
-    "violet" is the pink tint in .streamlit/config.toml (dark text on pink): used for Free and Funded.
+    Every badge colour except orange and red sits on the soft gold tint in .streamlit/config.toml, with dark text;
+    "violet" (ink text) is used for Free, Funded and medium demand.
     """
     return f":{color}-badge[{escape(text)}]"
 

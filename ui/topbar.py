@@ -1,4 +1,4 @@
-"""The top bar: the Guide menu and the brand on the left, a demo-account menu on the right. Display only.
+"""The top bar: the Root logo first at the far left, then the Guide menu, and a demo-account menu on the right. Display only.
 
 No name, photo, email or other personal data is shown or stored: the "account" is a labelled prototype.
 """
@@ -15,7 +15,7 @@ from ui.theme import BRAND_KEY, TOPBAR_KEY
 
 BRAND = "Root"  # the text shown if the logo file is missing; not a heading: the page's one h1 is in the hero
 LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "brand" / "root-logo.svg"  # read-only, never edited here
-LOGO_HEIGHT_PX = 32
+LOGO_HEIGHT_PX = 48
 _DEFAULT_RATIO = 264 / 116  # width / height of the logo as delivered
 DEMO_LABEL = ":material/account_circle: Demo account"
 DEMO_TEXT = (
@@ -45,8 +45,8 @@ def render_topbar() -> None:
     """The first thing on the page. One row on a laptop; it wraps onto a second row at 375px."""
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", key=TOPBAR_KEY):
         with st.container(horizontal=True, vertical_alignment="center", width="content"):
-            guide.render_guide()
             with st.container(key=BRAND_KEY, width="content"):
                 _render_brand()
+            guide.render_guide()
         with st.popover(DEMO_LABEL):
             st.markdown(DEMO_TEXT)

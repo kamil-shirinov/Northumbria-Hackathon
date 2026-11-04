@@ -354,7 +354,7 @@ def render_chat(group: str, profile: dict, context: dict, careers: list[dict], c
         st.caption("Ask a question below, or pick one of the suggestions.")
 
     # Enter sends the question as well as the button. The box is cleared by its new key, not by clear_on_submit.
-    with st.form("chat_form"):  # bordered like the profile form, so both get the same light-blue surface
+    with st.form("chat_form"):  # bordered like the profile form, so both get the same pale-sage surface
         st.text_input(
             f"Or ask your own question (up to {MAX_CHARS} characters)",
             max_chars=MAX_CHARS,
