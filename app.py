@@ -13,18 +13,25 @@ from ui import chat as chat_ui
 from ui import components
 from ui import courses as courses_ui
 from ui import group as group_ui
+from ui import guide
 from ui import profile_form
 from ui import safeguards
 from ui import skills_gap as skills_gap_ui
+from ui import theme
 
 st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="centered")
+theme.apply_theme()
 
 st.session_state.setdefault("profile", None)
 st.session_state.setdefault("group", None)
 st.session_state.setdefault("career", None)
 
-st.title("Career Pathways", anchor=False)
-st.write("See North East careers that fit you. See which skills you still need. Find courses to close the gap.")
+# The Guide menu button sits at the top left, above the title.
+guide.render_guide()
+
+with st.container(key=theme.HERO_KEY):
+    st.title("Career Pathways", anchor=False)
+    st.markdown("Find North East careers, the skills they need, and the courses that get you there.")
 
 # How the page works and how it stays fair, before the form
 safeguards.render_how_it_works()

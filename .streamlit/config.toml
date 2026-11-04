@@ -1,13 +1,40 @@
 [theme]
 base = "light"
-# Contrast against white: primary 5.3:1 (needs 4.5:1). The darker text colour also lifts captions, which
-# Streamlit draws at 60% of the text colour, from about 3.7:1 to 4.7:1.
-primaryColor = "#0b6bcb"
-textColor = "#111827"
+
+# Palette: white page, light-blue surfaces, pink accent. Every text/background pair below is at least 4.5:1
+# (the numbers are printed by the contrast check in the session that added this theme).
+backgroundColor = "#FFFFFF"            # the page
+secondaryBackgroundColor = "#EEF6FF"   # cards, the forms, the expander and inputs (Streamlit paints inputs with this)
+textColor = "#111827"                  # 17.7:1 on white, 16.3:1 on the light blue
+primaryColor = "#C2185B"               # buttons and highlights; white text on it is 5.9:1
+linkColor = "#C2185B"                  # 5.9:1 on white, 5.4:1 on the light blue
+linkUnderline = true                   # links never rely on colour alone
+
+# Inputs need a visible edge (3:1 against the page). The cards, the forms and the expander soften it in ui/theme.py.
+showWidgetBorder = true
+borderColor = "#6B8FBF"
+baseRadius = "0.75rem"
+
+# Badge and alert colours: dark text on a solid tint, so each pair stays above 4.5:1 on white and on the light blue.
+blueTextColor = "#0B4F8A"
+blueBackgroundColor = "#DCEBFA"
+greenTextColor = "#14532D"
+greenBackgroundColor = "#D9F2E3"
+orangeTextColor = "#7C3A00"
+orangeBackgroundColor = "#FFE9CC"
+redTextColor = "#8B1A1A"
+redBackgroundColor = "#FDE2E2"
+grayTextColor = "#374151"
+grayBackgroundColor = "#E5E7EB"
+# "violet" is the pink tint: the Free and Funded badges (ui/courses.py). Pink is only ever a background for dark text.
+violetTextColor = "#111827"
+violetBackgroundColor = "#FCE4EC"
 
 [client]
 # "none": the page shows only a generic message when something breaks. Details still print in the terminal.
 showErrorDetails = "none"
+# "minimal": hides the Deploy button and the developer menu.
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

@@ -30,7 +30,10 @@ def escape(text: object) -> str:
 
 
 def badge(text: str, color: str = "blue") -> str:
-    """A Streamlit badge as a markdown string. Colours: blue, green, orange, red, violet, gray."""
+    """A Streamlit badge as a markdown string. Colours: blue, green, orange, red, violet, gray.
+
+    "violet" is the pink tint in .streamlit/config.toml (dark text on pink): used for Free and Funded.
+    """
     return f":{color}-badge[{escape(text)}]"
 
 
