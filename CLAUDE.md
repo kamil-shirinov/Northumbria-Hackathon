@@ -40,6 +40,7 @@ Kamil's cloud sessions:
 pip install -q -r requirements.txt   # first, in every new session
 python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
 python3 -m eval.bias_test
+python3 -m eval.grounding_test   # writes eval/results/grounding.md; mock without a key
 MOCK_LLM=1 streamlit run app.py
 ```
 
@@ -49,6 +50,18 @@ MOCK_LLM=1 streamlit run app.py
 - Cache identical questions.
 - `MOCK_LLM=1` for all development and tests.
 - The API key lives only in `.env` on the demo laptop, never in code, commits or cloud sessions.
+
+## Advisor (advisor.py; the ask() contract is unchanged)
+
+- Mode: "mock" if `MOCK_LLM=1` or `ANTHROPIC_API_KEY` is missing, else "live". An empty context gets a fixed "not sure" answer with `NCS_URL` and no API call.
+- Live call: `anthropic.Anthropic(timeout=20, max_retries=1).messages.create(model=MODEL, max_tokens=400, temperature=0, ...)`, retried once without temperature if the API rejects it. The system prompt is `BASE_ADVISOR_RULES` + the group's `advisor_instructions` + the results as compact JSON (careers, selected_career, gap, courses, and the profile's qualification, experience, interests and skills; never the town). The messages are the last 6 history turns + the question.
+- `advisor.validate(answer, context, user_text="") -> (mentioned_ids, unknown_mentions)`. It flags [IDs] not in the context, data/*.csv careers and courses outside the results, invented named courses, qualifications, colleges and universities (title-case phrases with Course, Bootcamp, Apprenticeship, Certificate, Diploma, Degree, BTEC, NVQ, HNC, HND, T Level, Academy, Programme, College or University that match nothing in the context), URLs other than a context `source_url` or `NCS_URL`, and £ figures (£22,000, £22k or 22,000) other than a context pay or cost. Context titles without an ID count as mentions. It never flags the National Careers Service, group labels, generic phrases ("a Level 2 course") or the user's own words (named things, figures or links from the question or their earlier turns; [IDs] are always checked).
+- Regeneration: unknown mentions or a closed-door phrase ("not possible for you", "you can't become", "isn't an option for you"…) trigger at most one regeneration, which tells the model what to drop. The less-flagged answer wins. Anything still unknown is returned in `unknown_mentions`, and the UI shows the warning.
+- Safeguards enforced in code: a closed-door phrase that survives regeneration gets "There's always a route: … ask the National Careers Service (NCS_URL)." appended. An answer that cites no result and has no NCS pointer gets "Not sure? The National Careers Service can help: NCS_URL" appended. The mock never echoes [IDs] typed in the question.
+- Failures: any API error or timeout is printed to stderr and the mock answer is returned (mode "mock"), so the demo never crashes. If the regeneration call fails, the first answer is kept with its flags.
+- Budget: an in-memory cache keyed on group + normalised question + context IDs (and gap) + the last 6 turns (only live answers are cached). A cap of `ADVISOR_MAX_CALLS` (default 200) API calls per process; after that, the mock with a note.
+- Observability: `advisor.usage()` returns `{"calls", "cached", "input_tokens", "output_tokens"}`. `advisor.last_debug` holds the last ask's `{"regenerated", "first_unknown", "closed_door_fixed", "cached"}`. `advisor.reset()` clears the cache, counters and client (for tests and evals).
+- Tests: `tests/test_advisor.py` uses a fake client and tests/fixtures (no network, no key). Eval: `python3 -m eval.grounding_test` (15 questions in `eval/questions.txt` × 5 profiles) prints "Grounding: X/15 …" and writes `eval/results/grounding.md`, with a MOCK banner when not live.
 
 ## Safeguards visible in the demo
 
