@@ -70,7 +70,7 @@ def render_careers(careers: list[dict], group: str) -> dict | None:
         st.session_state[CAREER_KEY] = ids[0]
     selected_id = st.session_state[CAREER_KEY]
 
-    # Two to a row on a wide screen, one on a phone; the order is the ranking either way.
-    components.card_grid(careers, lambda career: _card(career, group_label, selected=career["career_id"] == selected_id))
+    for career in careers:
+        _card(career, group_label, selected=career["career_id"] == selected_id)
 
     return next(c for c in careers if c["career_id"] == selected_id)
