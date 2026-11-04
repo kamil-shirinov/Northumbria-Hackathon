@@ -1,4 +1,4 @@
-"""Career Pathways: one page, sections 1 to 6. Page setup, session state and calls only.
+"""Root: one page, sections 1 to 6. Page setup, session state and calls only.
 
 Every decision comes from engine.py; everything drawn comes from ui/.
 """
@@ -13,18 +13,25 @@ from ui import chat as chat_ui
 from ui import components
 from ui import courses as courses_ui
 from ui import group as group_ui
+from ui import hero
 from ui import profile_form
 from ui import safeguards
 from ui import skills_gap as skills_gap_ui
+from ui import theme
+from ui import topbar
 
-st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="centered")
+st.set_page_config(page_title="Root: North East careers", page_icon="🧭", layout="wide")
+theme.apply_theme()
 
 st.session_state.setdefault("profile", None)
 st.session_state.setdefault("group", None)
 st.session_state.setdefault("career", None)
 
-st.title("Career Pathways", anchor=False)
-st.write("See North East careers that fit you. See which skills you still need. Find courses to close the gap.")
+# The top bar comes first: the Guide menu and brand on the left, the demo account on the right.
+topbar.render_topbar()
+
+# The hero band: the page's one h1, the tagline and the pathway.
+hero.render_hero()
 
 # How the page works and how it stays fair, before the form
 safeguards.render_how_it_works()

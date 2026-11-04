@@ -5,15 +5,18 @@ from __future__ import annotations
 import streamlit as st
 
 from ui import components
+from ui.theme import CARD_KEY_PREFIX
 
 
 def _card(course: dict) -> None:
     title = course.get("title", course.get("course_id", "Course"))
-    cost = f"**Cost:** {components.cost_text(course.get('cost_gbp'))}"
+    cost_label = components.cost_text(course.get("cost_gbp"))
+    # Free and Funded are soft-gold badges (the "violet" colour in .streamlit/config.toml, dark text on the gold tint).
+    cost = f"**Cost:** {components.badge(cost_label, 'violet') if cost_label == 'Free' else cost_label}"
     if course.get("funded"):
-        cost += f" {components.badge('Funded', 'green')}"
+        cost += f" {components.badge('Funded', 'violet')}"
 
-    with st.container(border=True):
+    with st.container(border=True, key=f"{CARD_KEY_PREFIX}course_{course.get('course_id', title)}"):
         st.subheader(components.escape(title), anchor=False)
         st.caption(components.escape(course.get("provider") or "Provider not listed"))
         st.markdown(cost)
@@ -51,5 +54,4 @@ def render_courses(courses: list[dict], missing: list[str], career: dict | None 
         f"Best match first. These courses teach skills you still need: {components.escape(', '.join(missing))}."
     )
     st.caption("Free and funded courses come first when courses cover the same skills.")
-    for course in courses:
-        _card(course)
+    components.card_grid(courses, _card)  # two to a row on a wide screen, one on a phone, in the engine's order

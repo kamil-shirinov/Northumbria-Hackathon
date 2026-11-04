@@ -1,13 +1,44 @@
 [theme]
 base = "light"
-# Contrast against white: primary 5.3:1 (needs 4.5:1). The darker text colour also lifts captions, which
-# Streamlit draws at 60% of the text colour, from about 3.7:1 to 4.7:1.
-primaryColor = "#0b6bcb"
-textColor = "#111827"
+
+# Palette from the Root logo: cream page, pale sage surfaces, dark green primary, brown captions, gold accent.
+# Every text/background pair below is at least 4.5:1 (the numbers are printed by the contrast check in the session
+# that added this theme). Gold is for borders, the pathway line and the band (ui/theme.py), never for text.
+backgroundColor = "#FAF6EE"            # the page (cream)
+secondaryBackgroundColor = "#EEF3EC"   # cards, the forms, the expander and inputs (pale sage; Streamlit paints inputs with this)
+textColor = "#1F2421"                  # 14.6:1 on the cream, 14.0:1 on the sage
+primaryColor = "#1E3A2F"               # buttons and focus (dark green); white text on it is 12.3:1
+linkColor = "#1E3A2F"                  # 11.5:1 on the cream, 11.0:1 on the sage
+linkUnderline = true                   # links never rely on colour alone
+
+# Inputs need a visible edge (3:1 against the page), which the gold accent #C29B52 can't give (2.4:1), so widget
+# edges are a darker gold-brown (4.6:1 on the cream, 4.4:1 on the sage). The cards, the forms and the expander use the
+# gold accent itself (ui/theme.py).
+showWidgetBorder = true
+borderColor = "#8A6B35"
+baseRadius = "0.75rem"
+
+# Badge and alert colours: dark text on a solid tint, so each pair stays above 4.5:1 on cream and on sage.
+# Badges sit on the soft gold tint #F3E9D2. Orange (the unpaid-placement warning) is a deeper gold; red is a terracotta tint.
+blueTextColor = "#1E3A2F"
+blueBackgroundColor = "#F3E9D2"
+greenTextColor = "#1E3A2F"
+greenBackgroundColor = "#F3E9D2"
+orangeTextColor = "#4A2F18"
+orangeBackgroundColor = "#EBD9AE"
+redTextColor = "#7A2414"
+redBackgroundColor = "#F4DDD3"
+grayTextColor = "#6B4F3A"
+grayBackgroundColor = "#F3E9D2"
+# "violet" is the Free, Funded and medium-demand badges (ui/courses.py, ui/components.py): ink text on the soft gold tint.
+violetTextColor = "#1F2421"
+violetBackgroundColor = "#F3E9D2"
 
 [client]
 # "none": the page shows only a generic message when something breaks. Details still print in the terminal.
 showErrorDetails = "none"
+# "minimal": hides the Deploy button and the developer menu.
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

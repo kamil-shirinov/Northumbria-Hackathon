@@ -6,6 +6,7 @@ import streamlit as st
 
 from groups import GROUPS
 from ui import components
+from ui.theme import CARD_KEY_PREFIX
 
 CAREER_KEY = "career_choice"  # selected career_id; app.py clears it when a new profile is submitted
 
@@ -24,7 +25,7 @@ def _route_text(career: dict) -> str:
 def _card(career: dict, group_label: str, selected: bool) -> None:
     career_id = career["career_id"]
     title = career.get("title", career_id)
-    with st.container(border=True):
+    with st.container(border=True, key=f"{CARD_KEY_PREFIX}career_{career_id}"):
         st.subheader(components.escape(title), anchor=False)
         st.markdown(
             f"{components.badge(career.get('sector') or 'Sector not listed', 'blue')} "
@@ -69,7 +70,7 @@ def render_careers(careers: list[dict], group: str) -> dict | None:
         st.session_state[CAREER_KEY] = ids[0]
     selected_id = st.session_state[CAREER_KEY]
 
-    for career in careers:
-        _card(career, group_label, selected=career["career_id"] == selected_id)
+    # Two to a row on a wide screen, one on a phone; the order is the ranking either way.
+    components.card_grid(careers, lambda career: _card(career, group_label, selected=career["career_id"] == selected_id))
 
     return next(c for c in careers if c["career_id"] == selected_id)

@@ -6,10 +6,12 @@ Display only. Nothing here ranks, filters or decides anything.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 import streamlit as st
 
 from groups import NCS_URL
+from ui.theme import FOOTER_KEY
 
 NCS_LINK = f"[National Careers Service]({NCS_URL})"
 
@@ -19,7 +21,7 @@ _MARKDOWN_SPECIAL = re.compile(r"([\\`*_\[\]$~<>#|])")
 # Text is always part of the badge, so meaning never depends on colour alone.
 _DEMAND_BADGES = {
     "high": ("High demand in the North East", "green"),
-    "medium": ("Medium demand in the North East", "orange"),
+    "medium": ("Medium demand in the North East", "violet"),  # orange is kept for the unpaid-placement warning
     "low": ("Lower demand in the North East", "gray"),
 }
 
@@ -30,7 +32,11 @@ def escape(text: object) -> str:
 
 
 def badge(text: str, color: str = "blue") -> str:
-    """A Streamlit badge as a markdown string. Colours: blue, green, orange, red, violet, gray."""
+    """A Streamlit badge as a markdown string. Colours: blue, green, orange, red, violet, gray.
+
+    Every badge colour except orange and red sits on the soft gold tint in .streamlit/config.toml, with dark text;
+    "violet" (ink text) is used for Free, Funded and medium demand.
+    """
     return f":{color}-badge[{escape(text)}]"
 
 
@@ -109,6 +115,16 @@ def empty_message(text: str) -> None:
     st.info(f"{text} The {NCS_LINK} can help you find a way in.")
 
 
+def card_grid(items: list[dict], draw: Callable[[dict], None]) -> None:
+    """Draw one card per item, two to a row on a wide screen. On a phone the columns stack, so the order stays the same."""
+    for start in range(0, len(items), 2):
+        for column, item in zip(st.columns(2, gap="medium"), items[start : start + 2]):
+            with column:
+                draw(item)
+
+
 def footer() -> None:
     st.divider()
-    st.caption(f"If your situation is complicated, talk to the {NCS_LINK}: {NCS_URL}")
+    with st.container(key=FOOTER_KEY):
+        st.caption("Root · prototype built at the Claude Builder Club hackathon, Northumbria University")
+        st.caption(f"If your situation is complicated, talk to the {NCS_LINK}: {NCS_URL}")
