@@ -9,6 +9,7 @@ import streamlit as st
 
 import engine
 from ui import careers as careers_ui
+from ui import chat as chat_ui
 from ui import components
 from ui import courses as courses_ui
 from ui import group as group_ui
@@ -43,18 +44,21 @@ group = group_ui.render_group(engine.assign_group(profile))
 st.session_state.group = group
 
 # 3. Careers
-career = careers_ui.render_careers(engine.rank_careers(profile, group, n=5), group)
+ranked = engine.rank_careers(profile, group, n=5)
+career = careers_ui.render_careers(ranked, group)
 st.session_state.career = career
 
+gap, courses = None, []
 if career is not None:
     # 4. Skills gap
     gap = engine.skills_gap(profile, career)
     skills_gap_ui.render_skills_gap(gap, career)
 
     # 5. Courses
-    missing = gap["missing"]
-    courses_ui.render_courses(engine.recommend_courses(missing, profile, n=5), missing, career)
+    courses = engine.recommend_courses(gap["missing"], profile, n=5)
+    courses_ui.render_courses(courses, gap["missing"], career)
 
-# 6. Advisor (placeholder)
-components.advisor_placeholder()
+# 6. Advisor chat. The context is exactly what is on the page, in the shape CONTRACT v1 defines.
+context = {"careers": ranked, "selected_career": career, "gap": gap, "courses": courses}
+chat_ui.render_chat(group, profile, context, ranked, courses)
 components.footer()

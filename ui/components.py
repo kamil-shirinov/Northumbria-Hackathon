@@ -81,12 +81,20 @@ def _link_target(url: str) -> str:
     return url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
 
+def source_link_markdown(url: object, subject: str | None = None) -> str | None:
+    """A markdown "Source" link, or None if the url is missing or isn't http(s)."""
+    url = str(url or "").strip()
+    if not url.lower().startswith(("https://", "http://")):
+        return None
+    name = f"Source for {escape(subject)}" if subject else "Source"
+    return f"[{name} ↗]({_link_target(url)})"
+
+
 def source_link(url: object, subject: str | None = None) -> None:
     """A "Source" link. Falls back to the National Careers Service if the link is missing."""
-    url = str(url or "").strip()
-    name = f"Source for {escape(subject)}" if subject else "Source"
-    if url.lower().startswith(("https://", "http://")):
-        st.markdown(f"[{name} ↗]({_link_target(url)})")
+    link = source_link_markdown(url, subject)
+    if link:
+        st.markdown(link)
     else:
         st.caption(f"We couldn't find a source link for this one. Try the {NCS_LINK} instead.")
 
@@ -99,11 +107,6 @@ def unpaid_flag(what: str = "route") -> None:
 def empty_message(text: str) -> None:
     """A friendly message in place of an empty section, always with a way forward."""
     st.info(f"{text} The {NCS_LINK} can help you find a way in.")
-
-
-def advisor_placeholder() -> None:
-    st.header("6. Ask your careers advisor (coming next)")
-    st.info("Soon you'll be able to ask questions about your careers, skills gap and courses here.")
 
 
 def footer() -> None:
