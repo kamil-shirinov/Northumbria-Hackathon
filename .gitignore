@@ -7,3 +7,4 @@ __pycache__/
 .streamlit/secrets.toml
 .DS_Store
 eval/results/grounding_mock.md
+eval/results/model_comparison_mock.md

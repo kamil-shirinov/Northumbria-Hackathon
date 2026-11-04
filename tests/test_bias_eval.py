@@ -21,7 +21,7 @@ def test_bias_eval_passes_on_the_data():
     assert identical == 20
 
 
-def test_bias_eval_catches_a_planted_bias(monkeypatch, capsys):
+def test_bias_eval_catches_a_planted_bias(monkeypatch, capsys, tmp_path):
     real = engine.rank_careers
 
     def biased(profile, group, n=5):
@@ -29,7 +29,20 @@ def test_bias_eval_catches_a_planted_bias(monkeypatch, capsys):
         return careers[::-1] if profile.get("gender") == "female" else careers
 
     monkeypatch.setattr(engine, "rank_careers", biased)
-    assert bias_test.main() == 1
+    results = tmp_path / "bias.md"
+    assert bias_test.main(results) == 1
     out = capsys.readouterr().out
     assert "Bias test: " in out and "/20 pairs identical" in out
     assert "rank_careers differs" in out
+    written = results.read_text()
+    assert "DIFFERS: rank_careers" in written and "## Differences" in written
+
+
+def test_bias_eval_writes_the_results_file(tmp_path):
+    results = tmp_path / "bias.md"
+    assert bias_test.main(results) == 0
+    lines = results.read_text().splitlines()
+    assert lines[2] == "**Bias test: 20/20 pairs identical**"
+    pair_rows = [line for line in lines if line.startswith("| ") and line.split("|")[1].strip().isdigit()]
+    assert len(pair_rows) == 20
+    assert all(row.rstrip(" |").endswith("identical") for row in pair_rows)
