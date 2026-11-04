@@ -18,11 +18,21 @@ Hackathon app (Python + Streamlit). It shows a user North East careers for their
 - Never edit a file you don't own.
 - Interface changes are agreed out loud, then Kamil records them here.
 
-## Git
+## Git workflow
 
-- Commit and push only to your own branch (Kamil's cloud sessions: `git push origin HEAD:backend`).
-- After this scaffold nobody pushes to `main`. Kamil merges PRs at 16:15, 17:00 and 17:25.
-- Never force-push.
+Everyone:
+
+- Every developer commits and pushes each working change to their own branch.
+- Never push to `main` directly. Never force-push or delete branches.
+
+Kamil's cloud sessions:
+
+- First, every session (the branch the session started on doesn't matter):
+  `git fetch origin`, then `git checkout backend` (or `git checkout -b backend origin/backend` if it isn't local), then `git pull --rebase origin backend`.
+- Commit every change as soon as the tests pass, with a clear message, and push it straight away:
+  `git pull --rebase origin backend`, then `git push origin backend`.
+- Never end a reply with uncommitted or unpushed work. End every reply with the commit hash.
+- At the checkpoints (16:15, 17:00, 17:25) the session merges `backend` and `frontend` into `main` through pull requests it opens and merges itself with `gh api` (REST endpoints; `gh pr` is blocked here). It merges only after the tests pass on the merged result.
 
 ## Commands
 
