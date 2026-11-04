@@ -51,7 +51,9 @@ question ─▶ advisor.py ─▶ Claude ─▶ validator vs data/*.csv ─▶ a
 
 **Grounding test** (`python3 -m eval.grounding_test`): 15 questions across 5 profiles, one per group. Some are traps: a course or college not in the results, London, a job guarantee. Every answer is re-checked by the validator.
 
-**Results:** `eval/results/grounding.md` (live run): `<live numbers>`
+**Results:**
+- `eval/results/grounding.md` (live run): Grounding: 15/15 answers with no unknown mentions · regenerations: 1 · closed-door phrases: 0 · calls: 16 · tokens in/out: 46026/4210
+- `eval/results/bias.md`: Bias test: 20/20 pairs identical
 
 ## Where it fails
 

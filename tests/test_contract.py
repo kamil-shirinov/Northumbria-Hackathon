@@ -346,7 +346,8 @@ def test_advisor_still_answers_with_an_empty_context(context, monkeypatch):
 
 
 def test_advisor_constants():
-    assert advisor.MODEL == "claude-haiku-5-5"
+    assert advisor.DEFAULT_MODEL == "claude-haiku-5-5"
+    assert advisor.models_from_env({}) == ("claude-haiku-5-5", "claude-haiku-5-5")
     assert advisor.MAX_TOKENS == 400
 
 
