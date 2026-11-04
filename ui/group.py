@@ -16,7 +16,7 @@ def _label(group_id: str) -> str:
 
 def render_group(assigned: str) -> str:
     """Show the assigned group and let the user pick another. Returns the chosen group id."""
-    st.header("2. Your group")
+    st.header("2. Your group", anchor=False)
 
     group_ids = list(GROUPS)
     if st.session_state.get(GROUP_KEY) not in GROUPS:

@@ -42,7 +42,7 @@ def _card(career: dict, group_label: str, selected: bool) -> None:
             st.markdown(components.badge("✓ Selected: see sections 4 and 5", "green"))
         else:
             st.button(
-                "Choose this career",
+                f"Choose {components.escape(title)}",  # the title, so each button makes sense on its own
                 key=f"pick_career_{career_id}",
                 on_click=_choose,
                 args=(career_id,),
@@ -52,7 +52,7 @@ def _card(career: dict, group_label: str, selected: bool) -> None:
 
 def render_careers(careers: list[dict], group: str) -> dict | None:
     """Show one card per career. Returns the selected career, which defaults to the first."""
-    st.header("3. Careers for you")
+    st.header("3. Careers for you", anchor=False)
 
     if not careers:
         components.empty_message("We couldn't find any careers to show yet.")

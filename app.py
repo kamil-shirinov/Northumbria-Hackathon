@@ -14,6 +14,7 @@ from ui import components
 from ui import courses as courses_ui
 from ui import group as group_ui
 from ui import profile_form
+from ui import safeguards
 from ui import skills_gap as skills_gap_ui
 
 st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="centered")
@@ -22,8 +23,11 @@ st.session_state.setdefault("profile", None)
 st.session_state.setdefault("group", None)
 st.session_state.setdefault("career", None)
 
-st.title("Career Pathways")
-st.write("Find careers in the North East that fit you, see which skills you still need, and find courses to close the gap.")
+st.title("Career Pathways", anchor=False)
+st.write("See North East careers that fit you. See which skills you still need. Find courses to close the gap.")
+
+# How the page works and how it stays fair, before the form
+safeguards.render_how_it_works()
 
 # 1. Profile
 submitted = profile_form.render_profile_form()

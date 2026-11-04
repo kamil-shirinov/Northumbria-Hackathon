@@ -32,7 +32,7 @@ def _card(course: dict) -> None:
 
 def render_courses(courses: list[dict], missing: list[str], career: dict | None = None) -> None:
     """Show one card per course, in the given order. `career` (optional) is used only when there are none."""
-    st.header("5. Courses to close the gap")
+    st.header("5. Courses to close the gap", anchor=False)
 
     if not missing:
         st.success("You already have every skill listed for this career, so there's no course to take for it.")
@@ -50,5 +50,6 @@ def render_courses(courses: list[dict], missing: list[str], career: dict | None 
     st.caption(
         f"Best match first. These courses teach skills you still need: {components.escape(', '.join(missing))}."
     )
+    st.caption("Free and funded courses come first when courses cover the same skills.")
     for course in courses:
         _card(course)
