@@ -54,6 +54,7 @@ question ─▶ advisor.py ─▶ Claude ─▶ validator vs data/*.csv ─▶ a
 **Results:**
 - `eval/results/grounding.md` (live run): Grounding: 15/15 answers with no unknown mentions · regenerations: 1 · closed-door phrases: 0 · calls: 16 · tokens in/out: 46026/4210
 - `eval/results/bias.md`: Bias test: 20/20 pairs identical
+- `eval/results/model_comparison.md` (live run): haiku: grounded 16/16, fairness 3/6, $0.00042/answer · sonnet: grounded 16/16, fairness 5/6, $0.00896/answer · cascade: grounded 16/16, fairness 2/6, $0.00095/answer · Winner: sonnet
 
 ## Where it fails
 
@@ -62,11 +63,12 @@ question ─▶ advisor.py ─▶ Claude ─▶ validator vs data/*.csv ─▶ a
 - **The validator** spots invented names by title-case words such as "Course" or "College". It can miss a lowercase invention or flag a harmless phrase, and the grounding test uses it too.
 - **The data** is a snapshot of CSV files exported from Google Sheets. Costs, funding and pay go out of date.
 - **No live job feeds.** We don't know what's open today.
+- **The fairness pairs are a small sample (6)** in the model comparison, so 5/6 against 3/6 is a signal, not proof.
 
 ## How we used AI
 
 - **Claude Code built it**: one cloud session per module, tests first.
-- **`claude-haiku-5-5` powers the advisor**: 400 max tokens, a cache, a call cap (200 by default), and `advisor.usage()` reports calls, cache hits and tokens, so we can work out cost per answer.
+- **`claude-sonnet-5-5` powers the advisor**: We chose Sonnet 5.5 because it was the most consistent when users mentioned personal characteristics in our comparison (5/6 fairness pairs against Haiku's 3/6), at about $0.009 per answer. 400 max tokens, a cache, a call cap (200 by default), and `advisor.usage()` reports calls, cache hits and tokens, so we can work out cost per answer.
 - **A planning chat** coordinated the two developers.
 
 ## Run it
