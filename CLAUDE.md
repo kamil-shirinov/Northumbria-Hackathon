@@ -40,7 +40,7 @@ Kamil's cloud sessions:
 ```bash
 pip install -q -r requirements.txt   # first, in every new session
 python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
-python3 -m eval.bias_test
+python3 -m eval.bias_test   # also writes eval/results/bias.md (deterministic, same in mock and live)
 python3 -m eval.grounding_test   # live (key) → eval/results/grounding.md; mock → grounding_mock.md (gitignored)
 python3 -m eval.model_compare    # haiku / sonnet / cascade; live → eval/results/model_comparison.md; mock → model_comparison_mock.md (gitignored)
 MOCK_LLM=1 streamlit run app.py   # MOCK_LLM: only 1/true/yes (any case) = mock; unset, empty, 0/false/no = live if ANTHROPIC_API_KEY is set; no key = always mock
