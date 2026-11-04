@@ -2,7 +2,8 @@
 
 Implements advisor.ask() from CONTRACT v1 (see CLAUDE.md).
 
-- Mode: "mock" if MOCK_LLM=1 or ANTHROPIC_API_KEY is missing, otherwise "live".
+- Mode (mode()): "mock" if MOCK_LLM is 1, true or yes (any case) or ANTHROPIC_API_KEY is
+  missing; otherwise "live" (MOCK_LLM unset, empty, 0, false or no).
 - Live: one Claude call with the engine results as the only allowed facts, then validate()
   checks the answer against the context and data/*.csv. Unknown mentions or a closed-door
   phrase trigger one regeneration. Safeguards (closed-door fix, NCS pointer) are applied
@@ -94,12 +95,34 @@ def _reset_debug() -> None:
     last_debug.update({"regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False})
 
 
-def _mode() -> str:
-    if os.environ.get("MOCK_LLM", "").strip().lower() in {"1", "true", "yes"}:
+MOCK_VALUES = {"1", "true", "yes"}  # MOCK_LLM values that mean mock (any case)
+LIVE_VALUES = {"0", "false", "no", ""}  # MOCK_LLM values that mean live when a key is set
+_warned_values: set[str] = set()
+
+
+def mode() -> str:
+    """"mock" or "live". Shared by ask() and eval/grounding_test.py.
+
+    Only MOCK_LLM = 1, true or yes (any case, surrounding spaces ignored) means mock.
+    Unset, empty, 0, false or no means live when ANTHROPIC_API_KEY is set. Any other value
+    is not a mock value either: it is treated like unset, with a warning on stderr.
+    Without a key it is always mock.
+    """
+    flag = os.environ.get("MOCK_LLM", "").strip().lower()
+    if flag in MOCK_VALUES:
         return "mock"
+    if flag not in LIVE_VALUES and flag not in _warned_values:
+        _warned_values.add(flag)
+        print(
+            f"advisor: MOCK_LLM={flag!r} isn't 1/true/yes or 0/false/no, so it doesn't mean mock",
+            file=sys.stderr,
+        )
     if not os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return "mock"
     return "live"
+
+
+_mode = mode  # old private name
 
 
 def _get_client():
@@ -703,12 +726,12 @@ def ask(group: str, profile: dict, context: dict, question: str, history: list[d
     _reset_debug()
     context = context or {}
     profile = profile or {}
-    mode = _mode()
+    current = mode()
 
     if _is_empty(context):
-        return {"answer": EMPTY_CONTEXT_ANSWER, "mentioned_ids": [], "unknown_mentions": [], "mode": mode}
+        return {"answer": EMPTY_CONTEXT_ANSWER, "mentioned_ids": [], "unknown_mentions": [], "mode": current}
 
-    if mode == "mock":
+    if current == "mock":
         return _mock_answer(context, question)
 
     key = _cache_key(group, context, question, history)

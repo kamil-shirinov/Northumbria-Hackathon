@@ -374,3 +374,50 @@ def test_live_validation_allows_names_from_the_question(live, context):
     client = live("Newcastle College isn't in your results. Care worker [CAR01] is.")
     result = ask(context, "Should I go to Newcastle College?")
     assert result["unknown_mentions"] == [] and len(client.calls) == 1
+
+
+# --------------------------------------------------------------------------- MOCK_LLM values
+
+MOCK_FLAGS = ["1", "true", "TRUE", "True", "yes", "YES", "Yes", " yes "]
+LIVE_FLAGS = ["0", "false", "FALSE", "False", "no", "NO", "No", "", "  "]
+
+
+@pytest.mark.parametrize("flag", MOCK_FLAGS)
+def test_mock_llm_mock_values_mean_mock_even_with_a_key(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "mock"
+    assert ask(context)["mode"] == "mock"
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("flag", LIVE_FLAGS)
+def test_mock_llm_live_values_mean_live_with_a_key(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "live"
+    assert ask(context)["mode"] == "live"
+    assert len(client.calls) == 1
+
+
+def test_mock_llm_unset_means_live_with_a_key(live, context):
+    live(CLEAN)
+    assert advisor.mode() == "live" and ask(context)["mode"] == "live"
+
+
+@pytest.mark.parametrize("flag", LIVE_FLAGS + [None])
+def test_no_key_is_always_mock(live, context, monkeypatch, flag):
+    client = live(CLEAN)
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    if flag is not None:
+        monkeypatch.setenv("MOCK_LLM", flag)
+    assert advisor.mode() == "mock" and ask(context)["mode"] == "mock"
+    assert client.calls == []
+
+
+def test_an_unrecognised_mock_llm_value_is_not_mock_and_warns(live, monkeypatch, capsys):
+    live()
+    monkeypatch.setenv("MOCK_LLM", "maybe")
+    monkeypatch.setattr(advisor, "_warned_values", set())
+    assert advisor.mode() == "live"
+    assert "MOCK_LLM='maybe'" in capsys.readouterr().err

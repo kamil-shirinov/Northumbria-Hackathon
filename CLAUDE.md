@@ -42,7 +42,7 @@ pip install -q -r requirements.txt   # first, in every new session
 python3 -m pytest -q   # not bare pytest: it picks the wrong Python in cloud sessions
 python3 -m eval.bias_test
 python3 -m eval.grounding_test   # live (key) → eval/results/grounding.md; mock → grounding_mock.md (gitignored)
-MOCK_LLM=1 streamlit run app.py
+MOCK_LLM=1 streamlit run app.py   # MOCK_LLM: only 1/true/yes (any case) = mock; unset, empty, 0/false/no = live if ANTHROPIC_API_KEY is set; no key = always mock
 ```
 
 ## Budget and secrets
@@ -54,7 +54,7 @@ MOCK_LLM=1 streamlit run app.py
 
 ## Advisor (advisor.py; the ask() contract is unchanged)
 
-- Mode: "mock" if `MOCK_LLM=1` or `ANTHROPIC_API_KEY` is missing, else "live". An empty context gets a fixed "not sure" answer with `NCS_URL` and no API call.
+- Mode (`advisor.mode()`, also used by the eval to choose its results file): "mock" if `MOCK_LLM` is 1, true or yes (any case) or `ANTHROPIC_API_KEY` is missing. "live" if the key is set and `MOCK_LLM` is unset, empty, 0, false or no. Any other value is not mock and prints a warning. An empty context gets a fixed "not sure" answer with `NCS_URL` and no API call.
 - Live call: `anthropic.Anthropic(timeout=20, max_retries=1).messages.create(model=MODEL, max_tokens=400, temperature=0, ...)`, retried once without temperature if the API rejects it. The system prompt is `BASE_ADVISOR_RULES` + the group's `advisor_instructions` + the results as compact JSON (careers, selected_career, gap, courses, and the profile's qualification, experience, interests and skills; never the town). The messages are the last 6 history turns + the question.
 - `advisor.validate(answer, context, user_text="") -> (mentioned_ids, unknown_mentions)`. It flags [IDs] not in the context, data/*.csv careers and courses outside the results, invented named courses, qualifications, colleges and universities (title-case phrases with Course, Bootcamp, Apprenticeship, Certificate, Diploma, Degree, BTEC, NVQ, HNC, HND, T Level, Academy, Programme, College or University that match nothing in the context), URLs other than a context `source_url` or `NCS_URL`, and £ figures (£22,000, £22k or 22,000) other than a context pay or cost. Context titles without an ID count as mentions. It never flags the National Careers Service, group labels, generic phrases ("a Level 2 course") or the user's own words (named things, figures or links from the question or their earlier turns; [IDs] are always checked).
 - Regeneration: unknown mentions or a closed-door phrase ("not possible for you", "you can't become", "isn't an option for you"…) trigger at most one regeneration, which tells the model what to drop. The less-flagged answer wins. Anything still unknown is returned in `unknown_mentions`, and the UI shows the warning.

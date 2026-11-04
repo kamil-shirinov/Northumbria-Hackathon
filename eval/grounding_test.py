@@ -11,7 +11,8 @@ validator false positives on the real data. Prints the headline line and always 
 it reports, it doesn't gate. A live run writes eval/results/grounding.md; a mock run
 writes eval/results/grounding_mock.md, so it never overwrites the live results.
 
-Live mode needs ANTHROPIC_API_KEY and MOCK_LLM unset; without a key it runs in mock mode.
+Mode follows advisor.mode(): live needs ANTHROPIC_API_KEY, with MOCK_LLM unset, empty, 0,
+false or no. MOCK_LLM = 1, true or yes (any case), or no key, runs in mock mode.
 """
 
 from __future__ import annotations
@@ -83,7 +84,7 @@ def _cell(text: str) -> str:
 
 
 def run() -> dict:
-    run_mode = advisor._mode()  # "live" with a key and MOCK_LLM unset, else "mock"
+    run_mode = advisor.mode()  # the same rule as ask(): see advisor.mode()
     questions = read_questions()
     profiles = build_profiles()
     rows = []
@@ -140,7 +141,7 @@ def write_report(report: dict, path: Path | None = None) -> Path:
     if s["live"] < s["total"]:
         lines += [
             f"> **MOCK MODE** ({s['total'] - s['live']}/{s['total']} answers are templates, not Claude). "
-            "Without ANTHROPIC_API_KEY, or with MOCK_LLM=1, or after an API error, the advisor returns a template "
+            "Without ANTHROPIC_API_KEY, or with MOCK_LLM=1/true/yes, or after an API error, the advisor returns a template "
             "built from the results. This run checks the pipeline and the validator's false positives on the "
             "current data, not the model. Run it with the key for the real grounding score.",
             "",
