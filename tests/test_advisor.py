@@ -143,10 +143,10 @@ def test_live_call_parameters_and_system_prompt(live, context):
     client = live(CLEAN)
     ask(context)
     call = client.calls[0]
-    assert call["model"] == advisor.MODEL == "claude-haiku-5-5"
+    assert call["model"] == advisor.MODEL == "claude-sonnet-5-5"
     assert call["max_tokens"] == advisor.MAX_TOKENS == 400
     assert "temperature" not in call
-    assert call["thinking"] == {"type": "disabled"}
+    assert call["thinking"] == {"type": "between_tools"}  # Sonnet 5.5 rejects "disabled"
     assert call["output_config"] == {"effort": "low"}
     system = call["system"]
     assert system.startswith(advisor.BASE_ADVISOR_RULES)
@@ -364,12 +364,12 @@ def test_400_on_disabled_thinking_retries_with_adaptive_and_remembers(live, cont
     client = live(BadRequest("thinking.type: 'disabled' is not supported for this model"), CLEAN, CLEAN, CLEAN)
     result = ask(context, "one")
     assert result["mode"] == "live" and result["answer"] == CLEAN
-    assert client.calls[0]["thinking"] == {"type": "disabled"}
+    assert client.calls[0]["thinking"] == {"type": "between_tools"}
     assert client.calls[1]["thinking"] == {"type": "adaptive"}
     assert client.calls[1]["output_config"] == {"effort": "low"} and client.calls[1]["max_tokens"] == 2000
     ask(context, "two")  # remembered for this model: straight to adaptive
     assert client.calls[2]["thinking"] == {"type": "adaptive"}
-    monkeypatch.setattr(advisor, "MODEL", "claude-sonnet-5-5")
+    monkeypatch.setattr(advisor, "MODEL", "claude-haiku-5-5")
     ask(context, "three")  # but not for another model
     assert client.calls[3]["thinking"] == {"type": "disabled"} and client.calls[3]["max_tokens"] == 400
     assert advisor.usage()["calls"] == 4
@@ -395,7 +395,7 @@ def test_old_sdk_without_the_arguments_gets_them_in_extra_body(live, context, mo
     client = OldSDKClient()
     monkeypatch.setattr(advisor, "_get_client", lambda: client)
     assert ask(context)["answer"] == CLEAN
-    assert client.calls[0]["extra_body"] == {"thinking": {"type": "disabled"}, "output_config": {"effort": "low"}}
+    assert client.calls[0]["extra_body"] == {"thinking": {"type": "between_tools"}, "output_config": {"effort": "low"}}
 
 
 def test_failed_regeneration_keeps_the_first_answer_with_its_warning(live, context):
@@ -416,7 +416,7 @@ def test_cache_hit_skips_the_client(live, context):
     assert advisor.last_debug["cached"] is True
     assert advisor.usage() == {
         "calls": 1, "cached": 1, "input_tokens": 100, "output_tokens": 40,
-        "by_model": {"claude-haiku-5-5": {"calls": 1, "input_tokens": 100, "output_tokens": 40}},
+        "by_model": {"claude-sonnet-5-5": {"calls": 1, "input_tokens": 100, "output_tokens": 40}},
     }
 
 
@@ -450,7 +450,7 @@ def test_usage_counts_tokens_across_calls(live, context):
     ask(context)
     assert advisor.usage() == {
         "calls": 2, "cached": 0, "input_tokens": 200, "output_tokens": 80,
-        "by_model": {"claude-haiku-5-5": {"calls": 2, "input_tokens": 200, "output_tokens": 80}},
+        "by_model": {"claude-sonnet-5-5": {"calls": 2, "input_tokens": 200, "output_tokens": 80}},
     }
 
 
@@ -590,10 +590,10 @@ def test_consecutive_same_role_turns_are_merged():
 @pytest.mark.parametrize(
     "env, expected",
     [
-        ({}, ("claude-haiku-5-5", "claude-haiku-5-5")),
-        ({"ADVISOR_MODEL": "", "ADVISOR_REGEN_MODEL": "  "}, ("claude-haiku-5-5", "claude-haiku-5-5")),
-        ({"ADVISOR_MODEL": " claude-sonnet-5-5 "}, ("claude-sonnet-5-5", "claude-sonnet-5-5")),
-        ({"ADVISOR_REGEN_MODEL": "claude-sonnet-5-5"}, ("claude-haiku-5-5", "claude-sonnet-5-5")),
+        ({}, ("claude-sonnet-5-5", "claude-sonnet-5-5")),
+        ({"ADVISOR_MODEL": "", "ADVISOR_REGEN_MODEL": "  "}, ("claude-sonnet-5-5", "claude-sonnet-5-5")),
+        ({"ADVISOR_MODEL": " claude-haiku-5-5 "}, ("claude-haiku-5-5", "claude-haiku-5-5")),
+        ({"ADVISOR_REGEN_MODEL": "claude-haiku-5-5"}, ("claude-sonnet-5-5", "claude-haiku-5-5")),
         ({"ADVISOR_MODEL": "claude-sonnet-5-5", "ADVISOR_REGEN_MODEL": "claude-haiku-5-5"},
          ("claude-sonnet-5-5", "claude-haiku-5-5")),
     ],
@@ -605,18 +605,19 @@ def test_models_from_env(env, expected):
 def test_models_are_read_from_the_environment_at_import(monkeypatch):
     import importlib
 
-    monkeypatch.setenv("ADVISOR_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setenv("ADVISOR_MODEL", "claude-haiku-5-5")
     monkeypatch.delenv("ADVISOR_REGEN_MODEL", raising=False)
     try:
         importlib.reload(advisor)
-        assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-sonnet-5-5", "claude-sonnet-5-5")
+        assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-haiku-5-5", "claude-haiku-5-5")
     finally:
         monkeypatch.delenv("ADVISOR_MODEL")
         importlib.reload(advisor)
-    assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-haiku-5-5", "claude-haiku-5-5")
+    assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-sonnet-5-5", "claude-sonnet-5-5")
 
 
 def test_regeneration_uses_the_regen_model_and_usage_splits_by_model(live, context, monkeypatch):
+    monkeypatch.setattr(advisor, "MODEL", "claude-haiku-5-5")
     monkeypatch.setattr(advisor, "REGEN_MODEL", "claude-sonnet-5-5")
     client = live("Try Electrician [CAR05].", CLEAN)
     result = ask(context)
@@ -638,7 +639,7 @@ def test_last_debug_records_a_failed_call(live, context):
     live(RuntimeError("overloaded"))
     assert ask(context)["mode"] == "mock"
     (call,) = advisor.last_debug["calls"]
-    assert call["model"] == "claude-haiku-5-5" and call["ok"] is False and "overloaded" in call["error"]
+    assert call["model"] == "claude-sonnet-5-5" and call["ok"] is False and "overloaded" in call["error"]
 
 
 def test_cached_answer_records_no_calls(live, context):
@@ -652,9 +653,10 @@ def test_cached_answer_records_no_calls(live, context):
 def test_cache_is_per_model(live, context, monkeypatch):
     client = live(CLEAN, CLEAN)
     ask(context)
-    monkeypatch.setattr(advisor, "MODEL", "claude-sonnet-5-5")
+    monkeypatch.setattr(advisor, "MODEL", "claude-haiku-5-5")
     ask(context)
-    assert [c["model"] for c in client.calls] == ["claude-haiku-5-5", "claude-sonnet-5-5"]
+    assert [c["model"] for c in client.calls] == ["claude-sonnet-5-5", "claude-haiku-5-5"]
+    assert [c["thinking"] for c in client.calls] == [{"type": "between_tools"}, {"type": "disabled"}]
 
 
 def test_temperature_is_never_sent(live, context, monkeypatch):

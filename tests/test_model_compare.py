@@ -226,8 +226,9 @@ def test_full_live_run_with_a_fake_client(live_client, tmp_path):
     regen_models = [c["model"] for c in client.calls if len(c["messages"]) == 3]
     assert regen_models.count(mc.SONNET) == 28 and regen_models.count(mc.HAIKU) == 28
 
-    # Same call settings as the app: thinking off, effort low, no temperature.
-    assert all(c["thinking"] == {"type": "disabled"} and c["output_config"] == {"effort": "low"}
+    # Same call settings as the app: thinking off (between_tools on Sonnet), effort low, no temperature.
+    assert all(c["thinking"] == ({"type": "between_tools"} if c["model"] == mc.SONNET else {"type": "disabled"})
+               and c["output_config"] == {"effort": "low"}
                and "temperature" not in c for c in client.calls)
 
     # Cost: haiku 2×$0.00015, sonnet $0.003, cascade $0.00315 per answer → haiku wins on cost.
@@ -239,7 +240,7 @@ def test_full_live_run_with_a_fake_client(live_client, tmp_path):
     assert s["sonnet"]["latency_max_s"] >= s["sonnet"]["latency_median_s"] >= 0
 
     # The module's models are restored after the run.
-    assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-haiku-5-5", "claude-haiku-5-5")
+    assert (advisor.MODEL, advisor.REGEN_MODEL) == ("claude-sonnet-5-5", "claude-sonnet-5-5")
 
     text = mc.write_report(report, tmp_path / "model_comparison.md").read_text(encoding="utf-8")
     assert "MOCK MODE" not in text and "**Winner: haiku**" in text
