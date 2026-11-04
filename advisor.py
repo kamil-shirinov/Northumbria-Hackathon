@@ -8,8 +8,12 @@ Implements advisor.ask() from CONTRACT v1 (see CLAUDE.md).
   checks the answer against the context and data/*.csv. Unknown mentions or a closed-door
   phrase trigger one regeneration. Safeguards (closed-door fix, NCS pointer) are applied
   in code, whatever the model wrote.
+- Models: ADVISOR_MODEL (default claude-haiku-5-5) writes the answer and ADVISOR_REGEN_MODEL
+  (default: the answer model) writes the one regeneration. eval/model_compare.py sets
+  MODEL and REGEN_MODEL on this module to compare configurations.
 - Budget: identical questions are cached, and live calls are capped per process
-  (ADVISOR_MAX_CALLS, default 200). usage() and last_debug report what happened.
+  (ADVISOR_MAX_CALLS, default 200). usage() (totals and per model) and last_debug (each
+  call's model and latency) report what happened.
 - Any API error or timeout falls back to the mock answer, so the demo never crashes.
 """
 
@@ -20,6 +24,7 @@ import json
 import os
 import re
 import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -27,7 +32,22 @@ from groups import BASE_ADVISOR_RULES, GROUPS, NCS_URL, QUALIFICATIONS
 
 load_dotenv()  # reads .env on the demo laptop if present; real environment variables win
 
-MODEL = "claude-haiku-5-5"
+DEFAULT_MODEL = "claude-haiku-5-5"
+
+
+def models_from_env(env=None) -> tuple[str, str]:
+    """(answer model, regeneration model) from ADVISOR_MODEL and ADVISOR_REGEN_MODEL.
+
+    Unset or blank ADVISOR_MODEL means DEFAULT_MODEL; unset or blank ADVISOR_REGEN_MODEL
+    means the answer model. Surrounding spaces are ignored.
+    """
+    env = os.environ if env is None else env
+    model = (env.get("ADVISOR_MODEL") or "").strip() or DEFAULT_MODEL
+    regen = (env.get("ADVISOR_REGEN_MODEL") or "").strip() or model
+    return model, regen
+
+
+MODEL, REGEN_MODEL = models_from_env()
 MAX_TOKENS = 400
 TIMEOUT_SECONDS = 20
 HISTORY_TURNS = 6
@@ -68,31 +88,43 @@ _CLOSED_DOOR_RE = re.compile("|".join(f"(?:{p})" for p in CLOSED_DOOR_PATTERNS),
 # --------------------------------------------------------------------------- state
 
 _client = None
-_send_temperature = True
+_no_temperature: set[str] = set()  # models whose API rejected temperature
 _cache: dict[tuple, dict] = {}
 _usage = {"calls": 0, "cached": 0, "input_tokens": 0, "output_tokens": 0}
-last_debug: dict = {"regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False}
+_by_model: dict[str, dict] = {}  # model -> {"calls", "input_tokens", "output_tokens"}
+# calls: one {"model", "purpose": "answer"|"regeneration", "latency_s", "input_tokens",
+# "output_tokens", "ok", "error"} per API request in the last ask, in order.
+last_debug: dict = {
+    "regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False, "calls": [],
+}
 
 
 def usage() -> dict:
-    """Live API calls made, cache hits and tokens used by this process."""
-    return dict(_usage)
+    """Live API calls made, cache hits and tokens used by this process, in total and per model.
+
+    {"calls", "cached", "input_tokens", "output_tokens",
+     "by_model": {model: {"calls", "input_tokens", "output_tokens"}}}
+    """
+    return {**_usage, "by_model": copy.deepcopy(_by_model)}
 
 
 def reset() -> None:
     """Clear the cache, usage counters, client and last_debug. For tests and evals."""
-    global _client, _send_temperature
+    global _client
     _client = None
-    _send_temperature = True
+    _no_temperature.clear()
     _cache.clear()
     for key in _usage:
         _usage[key] = 0
+    _by_model.clear()
     _reset_debug()
 
 
 def _reset_debug() -> None:
     last_debug.clear()
-    last_debug.update({"regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False})
+    last_debug.update(
+        {"regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False, "calls": []}
+    )
 
 
 MOCK_VALUES = {"1", "true", "yes"}  # MOCK_LLM values that mean mock (any case)
@@ -628,27 +660,49 @@ def _correction(unknown: list[str], closed: list[str]) -> str:
 # --------------------------------------------------------------------------- live call
 
 
-def _call(system: str, messages: list[dict]) -> str:
-    """One messages.create call. Retries once without temperature if the API rejects it."""
-    global _send_temperature
-    client = _get_client()
-    kwargs = {"model": MODEL, "max_tokens": MAX_TOKENS, "system": system, "messages": messages}
+def _request(client, model: str, purpose: str, kwargs: dict):
+    """One API request, counted in usage() and recorded (model, latency) in last_debug["calls"]."""
     _usage["calls"] += 1
-    if _send_temperature:
+    stats = _by_model.setdefault(model, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+    stats["calls"] += 1
+    record = {"model": model, "purpose": purpose, "latency_s": 0.0, "input_tokens": 0, "output_tokens": 0,
+              "ok": False, "error": ""}
+    last_debug.setdefault("calls", []).append(record)
+    start = time.perf_counter()
+    try:
+        response = client.messages.create(**kwargs)
+    except Exception as exc:
+        record["error"] = f"{type(exc).__name__}: {exc}"[:200]
+        raise
+    finally:
+        record["latency_s"] = round(time.perf_counter() - start, 3)
+    used = getattr(response, "usage", None)
+    tokens_in = int(getattr(used, "input_tokens", 0) or 0)
+    tokens_out = int(getattr(used, "output_tokens", 0) or 0)
+    _usage["input_tokens"] += tokens_in
+    _usage["output_tokens"] += tokens_out
+    stats["input_tokens"] += tokens_in
+    stats["output_tokens"] += tokens_out
+    record.update(input_tokens=tokens_in, output_tokens=tokens_out, ok=True)
+    return response
+
+
+def _call(system: str, messages: list[dict], model: str | None = None, purpose: str = "answer") -> str:
+    """One messages.create call. Retries once without temperature if the API rejects it."""
+    model = model or MODEL
+    client = _get_client()
+    kwargs = {"model": model, "max_tokens": MAX_TOKENS, "system": system, "messages": messages}
+    if model not in _no_temperature:
         try:
-            response = client.messages.create(temperature=0, **kwargs)
+            response = _request(client, model, purpose, {**kwargs, "temperature": 0})
         except Exception as exc:
             if "temperature" not in str(exc).lower():
                 raise
-            _send_temperature = False
-            _usage["calls"] += 1
-            response = client.messages.create(**kwargs)
+            _no_temperature.add(model)
+            response = _request(client, model, purpose, kwargs)
     else:
-        response = client.messages.create(**kwargs)
+        response = _request(client, model, purpose, kwargs)
 
-    used = getattr(response, "usage", None)
-    _usage["input_tokens"] += int(getattr(used, "input_tokens", 0) or 0)
-    _usage["output_tokens"] += int(getattr(used, "output_tokens", 0) or 0)
     text = "".join(
         getattr(block, "text", "") for block in (getattr(response, "content", None) or [])
         if getattr(block, "type", "text") == "text"
@@ -664,7 +718,7 @@ def _live_answer(group: str, profile: dict, context: dict, question: str, histor
 
     user_text = "\n".join(m["content"] for m in messages if m["role"] == "user")
 
-    answer = _call(system, messages)
+    answer = _call(system, messages, MODEL, "answer")
     mentioned, unknown = validate(answer, context, user_text)
     closed = closed_door_phrases(answer)
     last_debug["first_unknown"] = list(unknown)
@@ -676,7 +730,7 @@ def _live_answer(group: str, profile: dict, context: dict, question: str, histor
             {"role": "user", "content": _correction(unknown, closed)},
         ]
         try:
-            second = _call(system, retry)
+            second = _call(system, retry, REGEN_MODEL or MODEL, "regeneration")
         except Exception as exc:  # keep the first answer (and its warnings) if the retry fails
             print(f"advisor: regeneration failed ({type(exc).__name__}: {exc})", file=sys.stderr)
         else:
@@ -705,6 +759,8 @@ def _cache_key(group: str, context: dict, question: str, history: list[dict] | N
         if isinstance(t, dict)
     )
     return (
+        MODEL,
+        REGEN_MODEL,
         group,
         q,
         tuple(c.get("career_id") for c in context.get("careers") or []),
