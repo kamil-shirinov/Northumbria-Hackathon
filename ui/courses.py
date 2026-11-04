@@ -54,5 +54,4 @@ def render_courses(courses: list[dict], missing: list[str], career: dict | None 
         f"Best match first. These courses teach skills you still need: {components.escape(', '.join(missing))}."
     )
     st.caption("Free and funded courses come first when courses cover the same skills.")
-    for course in courses:
-        _card(course)
+    components.card_grid(courses, _card)  # two to a row on a wide screen, one on a phone, in the engine's order

@@ -13,25 +13,25 @@ from ui import chat as chat_ui
 from ui import components
 from ui import courses as courses_ui
 from ui import group as group_ui
-from ui import guide
+from ui import hero
 from ui import profile_form
 from ui import safeguards
 from ui import skills_gap as skills_gap_ui
 from ui import theme
+from ui import topbar
 
-st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="centered")
+st.set_page_config(page_title="Career Pathways: North East", page_icon="🧭", layout="wide")
 theme.apply_theme()
 
 st.session_state.setdefault("profile", None)
 st.session_state.setdefault("group", None)
 st.session_state.setdefault("career", None)
 
-# The Guide menu button sits at the top left, above the title.
-guide.render_guide()
+# The top bar comes first: the Guide menu and brand on the left, the demo account on the right.
+topbar.render_topbar()
 
-with st.container(key=theme.HERO_KEY):
-    st.title("Career Pathways", anchor=False)
-    st.markdown("Find North East careers, the skills they need, and the courses that get you there.")
+# The hero band: the page's one h1, the tagline and the pathway.
+hero.render_hero()
 
 # How the page works and how it stays fair, before the form
 safeguards.render_how_it_works()
