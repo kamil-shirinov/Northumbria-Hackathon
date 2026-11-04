@@ -26,8 +26,28 @@ PROFILE = {
 CLEAN = "Care worker [CAR01] pays £21,000 to £25,000 a year. Start with Free short [CRS04], which is free."
 
 
+def response(*blocks, stop_reason="end_turn", input_tokens=100, output_tokens=40):
+    """A fake API response. Each block is ("text", "...") or ("thinking", "...")."""
+    content = [
+        SimpleNamespace(type=kind, text=body) if kind == "text" else SimpleNamespace(type=kind, thinking=body)
+        for kind, body in blocks
+    ]
+    return SimpleNamespace(
+        content=content,
+        stop_reason=stop_reason,
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
+
+
+class BadRequest(Exception):
+    """Like anthropic.BadRequestError: carries status_code 400."""
+
+    status_code = 400
+
+
 class FakeClient:
-    """Stands in for anthropic.Anthropic(): replies in order; an Exception reply is raised."""
+    """Stands in for anthropic.Anthropic(): replies in order. A str reply becomes one text block,
+    an Exception reply is raised and any other reply (see response()) is returned as it is."""
 
     def __init__(self, *replies):
         self.replies = list(replies)
@@ -39,10 +59,9 @@ class FakeClient:
         reply = self.replies.pop(0) if self.replies else CLEAN
         if isinstance(reply, Exception):
             raise reply
-        return SimpleNamespace(
-            content=[SimpleNamespace(type="text", text=reply)],
-            usage=SimpleNamespace(input_tokens=100, output_tokens=40),
-        )
+        if isinstance(reply, str):
+            return response(("text", reply))
+        return reply
 
 
 @pytest.fixture(autouse=True)
@@ -126,7 +145,9 @@ def test_live_call_parameters_and_system_prompt(live, context):
     call = client.calls[0]
     assert call["model"] == advisor.MODEL == "claude-haiku-5-5"
     assert call["max_tokens"] == advisor.MAX_TOKENS == 400
-    assert call["temperature"] == 0
+    assert "temperature" not in call
+    assert call["thinking"] == {"type": "disabled"}
+    assert call["output_config"] == {"effort": "low"}
     system = call["system"]
     assert system.startswith(advisor.BASE_ADVISOR_RULES)
     assert "GCSE level" in system
@@ -283,12 +304,98 @@ def test_timeout_returns_the_mock(live, context):
     assert ask(context)["mode"] == "mock"
 
 
-def test_rejected_temperature_is_retried_once_without_it(live, context):
-    client = live(RuntimeError("temperature: not supported for this model"), CLEAN)
+# --------------------------------------------------------------------------- thinking, stop reasons
+
+
+def test_thinking_then_text_reads_only_the_text_blocks(live, context):
+    live(response(("thinking", "Let me look at the results."), ("text", "Care worker [CAR01] pays £21,000 "),
+                  ("text", "to £25,000 a year.")))
+    result = ask(context)
+    assert result["mode"] == "live"
+    assert result["answer"].startswith("Care worker [CAR01] pays £21,000 to £25,000 a year.")
+    assert "Let me look" not in result["answer"]
+
+
+def test_max_tokens_with_no_text_retries_once_with_adaptive_thinking(live, context, capsys):
+    client = live(response(("thinking", "..."), stop_reason="max_tokens"), CLEAN)
     result = ask(context)
     assert result["mode"] == "live" and result["answer"] == CLEAN
-    assert "temperature" in client.calls[0] and "temperature" not in client.calls[1]
-    assert advisor.usage()["calls"] == 2
+    assert len(client.calls) == 2
+    retry = client.calls[1]
+    assert retry["thinking"] == {"type": "adaptive"} and retry["output_config"] == {"effort": "low"}
+    assert retry["max_tokens"] == advisor.ADAPTIVE_MAX_TOKENS == 2000
+    assert "temperature" not in retry
+    err = capsys.readouterr().err
+    assert "max_tokens" in err and "thinking" in err
+
+
+def test_max_tokens_twice_falls_back_to_mock_and_logs_why(live, context, capsys):
+    client = live(response(("thinking", "..."), stop_reason="max_tokens"),
+                  response(("thinking", "..."), stop_reason="max_tokens"))
+    assert ask(context)["mode"] == "mock"
+    assert len(client.calls) == 2
+    err = capsys.readouterr().err
+    assert "empty answer" in err and "stop_reason='max_tokens'" in err and "['thinking']" in err
+
+
+def test_empty_answer_logs_stop_reason_and_block_types(live, context, capsys):
+    live(response(("thinking", "hmm"), stop_reason="end_turn"))
+    assert ask(context)["mode"] == "mock"
+    err = capsys.readouterr().err
+    assert "stop_reason='end_turn'" in err and "blocks=['thinking']" in err
+
+
+def test_refusal_returns_the_safe_answer_in_live_mode(live, context, capsys):
+    client = live(response(stop_reason="refusal"))
+    result = ask(context)
+    assert result == {"answer": advisor.REFUSAL_ANSWER, "mentioned_ids": [], "unknown_mentions": [], "mode": "live"}
+    assert "not sure" in result["answer"] and NCS_URL in result["answer"]
+    assert len(client.calls) == 1
+    assert "refused" in capsys.readouterr().err
+
+
+def test_refused_regeneration_keeps_the_first_answer(live, context):
+    live("Try Electrician [CAR05].", response(stop_reason="refusal"))
+    result = ask(context)
+    assert result["mode"] == "live" and result["unknown_mentions"] == ["[CAR05]"]
+
+
+def test_400_on_disabled_thinking_retries_with_adaptive_and_remembers(live, context, monkeypatch):
+    client = live(BadRequest("thinking.type: 'disabled' is not supported for this model"), CLEAN, CLEAN, CLEAN)
+    result = ask(context, "one")
+    assert result["mode"] == "live" and result["answer"] == CLEAN
+    assert client.calls[0]["thinking"] == {"type": "disabled"}
+    assert client.calls[1]["thinking"] == {"type": "adaptive"}
+    assert client.calls[1]["output_config"] == {"effort": "low"} and client.calls[1]["max_tokens"] == 2000
+    ask(context, "two")  # remembered for this model: straight to adaptive
+    assert client.calls[2]["thinking"] == {"type": "adaptive"}
+    monkeypatch.setattr(advisor, "MODEL", "claude-sonnet-5-5")
+    ask(context, "three")  # but not for another model
+    assert client.calls[3]["thinking"] == {"type": "disabled"} and client.calls[3]["max_tokens"] == 400
+    assert advisor.usage()["calls"] == 4
+
+
+def test_other_400s_are_not_retried(live, context):
+    client = live(BadRequest("messages: roles must alternate"))
+    assert ask(context)["mode"] == "mock"
+    assert len(client.calls) == 1
+
+
+def test_old_sdk_without_the_arguments_gets_them_in_extra_body(live, context, monkeypatch):
+    class OldSDKClient:
+        def __init__(self):
+            self.calls = []
+            self.messages = self
+
+        def create(self, *, model, max_tokens, system, messages, extra_body=None):
+            self.calls.append({"model": model, "max_tokens": max_tokens, "extra_body": extra_body})
+            return response(("text", CLEAN))
+
+    live()
+    client = OldSDKClient()
+    monkeypatch.setattr(advisor, "_get_client", lambda: client)
+    assert ask(context)["answer"] == CLEAN
+    assert client.calls[0]["extra_body"] == {"thinking": {"type": "disabled"}, "output_config": {"effort": "low"}}
 
 
 def test_failed_regeneration_keeps_the_first_answer_with_its_warning(live, context):
@@ -550,11 +657,8 @@ def test_cache_is_per_model(live, context, monkeypatch):
     assert [c["model"] for c in client.calls] == ["claude-haiku-5-5", "claude-sonnet-5-5"]
 
 
-def test_rejected_temperature_is_remembered_per_model(live, context, monkeypatch):
-    client = live(RuntimeError("temperature: not supported"), CLEAN, CLEAN)
-    ask(context, "one")
-    ask(context, "two")
-    assert "temperature" not in client.calls[2]
-    monkeypatch.setattr(advisor, "MODEL", "claude-sonnet-5-5")
-    ask(context, "three")
-    assert client.calls[3]["model"] == "claude-sonnet-5-5" and client.calls[3]["temperature"] == 0
+def test_temperature_is_never_sent(live, context, monkeypatch):
+    monkeypatch.setattr(advisor, "REGEN_MODEL", "claude-sonnet-5-5")
+    client = live("Try Electrician [CAR05].", CLEAN)
+    ask(context)
+    assert len(client.calls) == 2 and all("temperature" not in c for c in client.calls)

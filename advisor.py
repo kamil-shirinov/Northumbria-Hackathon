@@ -20,6 +20,7 @@ Implements advisor.ask() from CONTRACT v1 (see CLAUDE.md).
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import os
 import re
@@ -49,6 +50,13 @@ def models_from_env(env=None) -> tuple[str, str]:
 
 MODEL, REGEN_MODEL = models_from_env()
 MAX_TOKENS = 400
+# Haiku 5.5 thinks adaptively by default and thinking tokens count toward max_tokens, so
+# every call disables thinking. If a model rejects that (HTTP 400), or a reply stops at
+# max_tokens with no text, the call is retried once with adaptive thinking and this budget.
+ADAPTIVE_MAX_TOKENS = 2000
+THINKING_OFF = {"type": "disabled"}
+THINKING_ADAPTIVE = {"type": "adaptive"}
+OUTPUT_CONFIG = {"effort": "low"}
 TIMEOUT_SECONDS = 20
 HISTORY_TURNS = 6
 MAX_CALLS = int(os.environ.get("ADVISOR_MAX_CALLS") or 200)
@@ -60,6 +68,10 @@ CLOSED_DOOR_APPEND = (
     f"or ask the National Careers Service ({NCS_URL})."
 )
 CAP_NOTE = "(The live advisor has reached its limit for this session, so this is a template answer.)"
+REFUSAL_ANSWER = (
+    "I'm not sure I can help with that one. "
+    f"The National Careers Service can give you free, impartial advice: {NCS_URL}"
+)
 EMPTY_CONTEXT_ANSWER = (
     "I'm not sure: I don't have any results to base an answer on yet. "
     "Fill in your profile to see careers and courses, or ask the National Careers Service: "
@@ -88,12 +100,13 @@ _CLOSED_DOOR_RE = re.compile("|".join(f"(?:{p})" for p in CLOSED_DOOR_PATTERNS),
 # --------------------------------------------------------------------------- state
 
 _client = None
-_no_temperature: set[str] = set()  # models whose API rejected temperature
+_adaptive_only: set[str] = set()  # models whose API rejected disabled thinking (HTTP 400)
 _cache: dict[tuple, dict] = {}
 _usage = {"calls": 0, "cached": 0, "input_tokens": 0, "output_tokens": 0}
 _by_model: dict[str, dict] = {}  # model -> {"calls", "input_tokens", "output_tokens"}
-# calls: one {"model", "purpose": "answer"|"regeneration", "latency_s", "input_tokens",
-# "output_tokens", "ok", "error"} per API request in the last ask, in order.
+# calls: one {"model", "purpose": "answer"|"regeneration", "thinking": "disabled"|"adaptive",
+# "max_tokens", "latency_s", "input_tokens", "output_tokens", "stop_reason", "ok", "error"}
+# per API request in the last ask, in order.
 last_debug: dict = {
     "regenerated": False, "first_unknown": [], "closed_door_fixed": False, "cached": False, "calls": [],
 }
@@ -112,7 +125,7 @@ def reset() -> None:
     """Clear the cache, usage counters, client and last_debug. For tests and evals."""
     global _client
     _client = None
-    _no_temperature.clear()
+    _adaptive_only.clear()
     _cache.clear()
     for key in _usage:
         _usage[key] = 0
@@ -660,13 +673,48 @@ def _correction(unknown: list[str], closed: list[str]) -> str:
 # --------------------------------------------------------------------------- live call
 
 
-def _request(client, model: str, purpose: str, kwargs: dict):
+class Refusal(Exception):
+    """The API returned stop_reason "refusal"."""
+
+
+def _accepts(client, name: str) -> bool:
+    """Does client.messages.create take this keyword? (Older SDKs lack thinking/output_config.)"""
+    try:
+        params = inspect.signature(client.messages.create).parameters
+    except (TypeError, ValueError):
+        return True
+    return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def _call_kwargs(client, model: str, system: str, messages: list[dict], adaptive: bool) -> dict:
+    """messages.create arguments. Never sends temperature (Haiku 5.5 rejects non-default values)."""
+    kwargs = {
+        "model": model,
+        "max_tokens": ADAPTIVE_MAX_TOKENS if adaptive else MAX_TOKENS,
+        "system": system,
+        "messages": messages,
+    }
+    extra = {}
+    for name, value in (("thinking", THINKING_ADAPTIVE if adaptive else THINKING_OFF), ("output_config", OUTPUT_CONFIG)):
+        if _accepts(client, name):
+            kwargs[name] = dict(value)
+        else:
+            extra[name] = dict(value)
+    if extra:
+        kwargs["extra_body"] = extra
+    return kwargs
+
+
+def _request(client, purpose: str, kwargs: dict):
     """One API request, counted in usage() and recorded (model, latency) in last_debug["calls"]."""
+    model = kwargs["model"]
+    thinking = kwargs.get("thinking") or (kwargs.get("extra_body") or {}).get("thinking") or {}
     _usage["calls"] += 1
     stats = _by_model.setdefault(model, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
     stats["calls"] += 1
-    record = {"model": model, "purpose": purpose, "latency_s": 0.0, "input_tokens": 0, "output_tokens": 0,
-              "ok": False, "error": ""}
+    record = {"model": model, "purpose": purpose, "thinking": thinking.get("type", ""),
+              "max_tokens": kwargs["max_tokens"], "latency_s": 0.0, "input_tokens": 0, "output_tokens": 0,
+              "stop_reason": "", "ok": False, "error": ""}
     last_debug.setdefault("calls", []).append(record)
     start = time.perf_counter()
     try:
@@ -683,32 +731,62 @@ def _request(client, model: str, purpose: str, kwargs: dict):
     _usage["output_tokens"] += tokens_out
     stats["input_tokens"] += tokens_in
     stats["output_tokens"] += tokens_out
-    record.update(input_tokens=tokens_in, output_tokens=tokens_out, ok=True)
+    record.update(input_tokens=tokens_in, output_tokens=tokens_out,
+                  stop_reason=str(getattr(response, "stop_reason", "") or ""), ok=True)
     return response
 
 
+def _blocks(response) -> list:
+    return list(getattr(response, "content", None) or [])
+
+
+def _text(response) -> str:
+    """All text blocks joined (thinking and other blocks are skipped; never just content[0])."""
+    return "".join(getattr(b, "text", "") or "" for b in _blocks(response) if getattr(b, "type", None) == "text").strip()
+
+
+def _describe(response) -> str:
+    types = [getattr(b, "type", "?") for b in _blocks(response)]
+    return f"stop_reason={getattr(response, 'stop_reason', None)!r}, blocks={types}"
+
+
+def _rejects_disabled_thinking(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    return status == 400 and "thinking" in str(exc).lower()
+
+
 def _call(system: str, messages: list[dict], model: str | None = None, purpose: str = "answer") -> str:
-    """One messages.create call. Retries once without temperature if the API rejects it."""
+    """One answer from the API: thinking disabled, effort low, max_tokens MAX_TOKENS.
+
+    Retries once with adaptive thinking (max_tokens ADAPTIVE_MAX_TOKENS) if the API rejects
+    disabled thinking with a 400 (remembered per model) or stops at max_tokens with no text.
+    Raises Refusal on stop_reason "refusal" and RuntimeError on any other empty answer.
+    """
     model = model or MODEL
     client = _get_client()
-    kwargs = {"model": model, "max_tokens": MAX_TOKENS, "system": system, "messages": messages}
-    if model not in _no_temperature:
-        try:
-            response = _request(client, model, purpose, {**kwargs, "temperature": 0})
-        except Exception as exc:
-            if "temperature" not in str(exc).lower():
-                raise
-            _no_temperature.add(model)
-            response = _request(client, model, purpose, kwargs)
-    else:
-        response = _request(client, model, purpose, kwargs)
+    adaptive = model in _adaptive_only
+    try:
+        response = _request(client, purpose, _call_kwargs(client, model, system, messages, adaptive))
+    except Exception as exc:
+        if adaptive or not _rejects_disabled_thinking(exc):
+            raise
+        print(f"advisor: {model} rejected disabled thinking ({exc}); retrying with adaptive thinking", file=sys.stderr)
+        _adaptive_only.add(model)
+        adaptive = True
+        response = _request(client, purpose, _call_kwargs(client, model, system, messages, adaptive))
 
-    text = "".join(
-        getattr(block, "text", "") for block in (getattr(response, "content", None) or [])
-        if getattr(block, "type", "text") == "text"
-    ).strip()
+    if not adaptive and getattr(response, "stop_reason", None) == "max_tokens" and not _text(response):
+        print(f"advisor: {model} hit max_tokens with no text ({_describe(response)}); "
+              f"retrying with adaptive thinking and max_tokens {ADAPTIVE_MAX_TOKENS}", file=sys.stderr)
+        response = _request(client, purpose, _call_kwargs(client, model, system, messages, True))
+
+    if getattr(response, "stop_reason", None) == "refusal":
+        print(f"advisor: {model} refused ({_describe(response)})", file=sys.stderr)
+        raise Refusal(_describe(response))
+    text = _text(response)
     if not text:
-        raise RuntimeError("empty answer from the API")
+        print(f"advisor: empty answer from {model} ({_describe(response)})", file=sys.stderr)
+        raise RuntimeError(f"empty answer from the API ({_describe(response)})")
     return text
 
 
@@ -718,7 +796,10 @@ def _live_answer(group: str, profile: dict, context: dict, question: str, histor
 
     user_text = "\n".join(m["content"] for m in messages if m["role"] == "user")
 
-    answer = _call(system, messages, MODEL, "answer")
+    try:
+        answer = _call(system, messages, MODEL, "answer")
+    except Refusal:
+        return {"answer": REFUSAL_ANSWER, "mentioned_ids": [], "unknown_mentions": [], "mode": "live"}
     mentioned, unknown = validate(answer, context, user_text)
     closed = closed_door_phrases(answer)
     last_debug["first_unknown"] = list(unknown)
