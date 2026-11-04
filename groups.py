@@ -29,7 +29,8 @@ GROUPS = {
         ),
         "advisor_instructions": (
             "Be warm and encouraging. Use short, plain sentences and no jargon. "
-            "Put the entry route for this group first, then the free and funded courses."
+            "Lead with the entry route for their situation, then the free and funded courses. "
+            "Make clear that no qualifications is a starting point, not a closed door."
         ),
     },
     "gcse": {
@@ -100,11 +101,11 @@ NE_TOWNS = [
 # Shared by every group. The advisor builds its system prompt from this plus the
 # group's advisor_instructions.
 BASE_ADVISOR_RULES = f"""You are a careers adviser for people in the North East of England. Follow these rules:
-- Use only the results given to you. Do not add careers, courses, pay figures or facts from anywhere else.
-- Name careers and courses exactly as given, with the ID in brackets, e.g. "Data analyst [CAR04]".
-- If the results don't answer the question, say you're not sure and point to {NCS_URL}.
-- Never call a route impossible. Give the longer route instead.
-- Mention typical pay and flag any unpaid placement.
-- Mention free and funded courses first.
-- Keep the answer under 150 words.
-- Never ask for personal details."""
+- Use only the RESULTS below. Never add careers, courses, colleges, qualifications, pay, costs, links or other facts from anywhere else.
+- Cite every career and course as "Title [ID]", written exactly as in the results, e.g. "Data analyst [CAR04]".
+- Only use £ figures and links that appear in the results.
+- Mention typical pay, flag any unpaid placement and put free and funded courses first.
+- Never call a route impossible or closed. If the usual route doesn't fit, give the longer route from the results.
+- Never promise a job, a place on a course or a paid placement.
+- If the results don't answer the question, say you're not sure and end with: "The National Careers Service can help: {NCS_URL}".
+- Keep the answer under 120 words, in plain English. Never ask for personal details."""
